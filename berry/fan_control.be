@@ -23,8 +23,8 @@ class FanController
     self.exhaust_mult = persist.find('exhaust_mult', 1.0)
     if self.exhaust_mult < 0.5 self.exhaust_mult = 0.5 end
     if self.exhaust_mult > 1.5 self.exhaust_mult = 1.5 end
-    # Load exhaust_mode_mult from persist (0.5-1.5, default 1.3 = 130%)
-    self.exhaust_mode_mult = persist.find('exhaust_mode_mult', 1.3)
+    # Load exhaust_mode_mult from persist (0.5-1.5, default 0.75 = 75%)
+    self.exhaust_mode_mult = persist.find('exhaust_mode_mult', 0.75)
     if self.exhaust_mode_mult < 0.5 self.exhaust_mode_mult = 0.5 end
     if self.exhaust_mode_mult > 1.5 self.exhaust_mode_mult = 1.5 end
     self.power_level = 0
