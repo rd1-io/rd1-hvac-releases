@@ -218,6 +218,14 @@ class ErrorHandler
 
   def sync_lcd(force)
     if !force && self.error_mask == self.last_sent_mask return end
+    # Notify cloud logger about error change
+    var old_mask = self.last_sent_mask >= 0 ? self.last_sent_mask : 0
+    if self.error_mask != old_mask
+      try
+        global.cloud_logger.on_error_change(self.error_mask, old_mask)
+      except ..
+      end
+    end
     self.sync_lcd_critical()
   end
 
