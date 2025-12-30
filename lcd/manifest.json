@@ -1,0 +1,1 @@
+{"name":"vent-rd1-io LCD","version":"2","builds":[{"chipFamily":"ESP32-S3","parts":[{"path":"https://raw.githubusercontent.com/rd1-io/rd1-hvac-releases/main/lcd/lcd_firmware.bin","offset":0}]}]}
