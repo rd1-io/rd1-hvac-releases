@@ -4,9 +4,9 @@ import json
 class LCDBridge
   static var LCD_ADDR = 23
   static var STATUS_REG = 100
-  static var STATUS_COUNT = 11
+  static var STATUS_COUNT = 12
   static var ENV_REG = 200
-  static var ENV_COUNT = 18
+  static var ENV_COUNT = 20
   static var MATTER_STATUS_REG = 300
   static var MATTER_PAYLOAD_REG = 301
   static var MATTER_PAIRING_REG = 314
@@ -201,6 +201,14 @@ class LCDBridge
     end
     var err_mask = 0
     try err_mask = global.error_handler.error_mask except .. end
+    # Get Berry version
+    import persist
+    var cu_ver = persist.find("berry_version")
+    if cu_ver == nil cu_ver = 0 end
+    cu_ver = int(cu_ver)
+    # Get exhaust mode status
+    var exhaust_mode_active = 0
+    try exhaust_mode_active = global.exhaust_mode != nil && global.exhaust_mode.is_active() ? 1 : 0 except .. end
     return [
       err_mask,                                            # reg 200
       self.indoor_t != nil ? int(self.indoor_t * 10) : 0,  # reg 201
@@ -219,7 +227,9 @@ class LCDBridge
       uptime_sec & 0xFFFF,                                 # reg 214
       (uptime_sec >> 16) & 0xFFFF,                         # reg 215
       ip1,                                                 # reg 216
-      ip2                                                  # reg 217
+      ip2,                                                 # reg 217
+      cu_ver,                                              # reg 218
+      exhaust_mode_active                                  # reg 219
     ]
   end
 
@@ -300,6 +310,14 @@ class LCDBridge
     if bal < 50 bal = 50 end
     if bal > 150 bal = 150 end
     tasmota.cmd(string.format("ExhaustMultiplier %d", bal))
+  end
+
+  def apply_exhaust_mode_balance_lcd(bal)
+    if bal == nil return end
+    bal = int(bal)
+    if bal < 50 bal = 50 end
+    if bal > 150 bal = 150 end
+    tasmota.cmd(string.format("ExhaustModeMultiplier %d", bal))
   end
 
   def on_filter_reset(val)
@@ -413,7 +431,7 @@ tasmota.add_rule("ModBusReceived", def(value, trigger)
   if dev == 1 && fc == 3 && sa == 2 && vals != nil && size(vals) > 0
     lcd_bridge.on_co2(int(vals[0]))
   end
-  if dev == 23 && fc == 3 && sa == 100 && vals != nil && size(vals) >= 11
+  if dev == 23 && fc == 3 && sa == 100 && vals != nil && size(vals) >= 12
     lcd_bridge.on_response_ok()
     if vals[0] != nil
       lcd_bridge.lcd_target_c = int(vals[0]) / 10.0
@@ -454,6 +472,9 @@ tasmota.add_rule("ModBusReceived", def(value, trigger)
     end
     if vals[10] != nil
       lcd_bridge.on_ota_request(int(vals[10]))
+    end
+    if vals[11] != nil
+      lcd_bridge.apply_exhaust_mode_balance_lcd(int(vals[11]))
     end
   end
   if dev == 10 && fc == 4 && vals != nil && size(vals) > 0

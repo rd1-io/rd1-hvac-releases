@@ -138,10 +138,17 @@ class FanController
     tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":3,"startaddress":%d,"type":"uint16","count":1,"tag":"mao4:r03:","quiet":30,"retries":2}', self.MAO4_ADDR, reg))
   end
 
+  # Get the active balance multiplier (exhaust mode or normal)
+  def get_active_mult()
+    var in_exhaust_mode = false
+    try in_exhaust_mode = global.exhaust_mode != nil && global.exhaust_mode.is_active() except .. end
+    return in_exhaust_mode ? self.exhaust_mode_mult : self.exhaust_mult
+  end
+
   # Calculate and set both motors based on power level and balance
-  # exhaust_mult: 0.5-1.5 (50%-150%)
-  # If exhaust_mult <= 1.0: supply = base, exhaust = base * mult
-  # If exhaust_mult > 1.0: exhaust = base, supply = base / mult
+  # mult: 0.5-1.5 (50%-150%)
+  # If mult <= 1.0: supply = base, exhaust = base * mult
+  # If mult > 1.0: exhaust = base, supply = base / mult
   def set_both(lvl)
     if self.power_level != 0 && lvl != 0 lvl = self.power_level end
     if lvl != self.power_level return end
@@ -150,14 +157,15 @@ class FanController
     var e_pct = 0
     
     if base_pct > 0
-      if self.exhaust_mult <= 1.0
+      var mult = self.get_active_mult()
+      if mult <= 1.0
         # Balance <= 100%: supply at full, exhaust reduced
         s_pct = base_pct
-        e_pct = base_pct * self.exhaust_mult
+        e_pct = base_pct * mult
       else
         # Balance > 100%: exhaust at full, supply reduced
         e_pct = base_pct
-        s_pct = base_pct / self.exhaust_mult
+        s_pct = base_pct / mult
       end
       # Apply minimum motor threshold
       s_pct = self.clamp_motor(s_pct)
@@ -215,10 +223,11 @@ class FanController
     tasmota.web_send_decimal(string.format("{s}Приточный вентилятор{m}%i %%{e}", int(self.supply_pct)))
     tasmota.web_send_decimal(string.format("{s}Вытяжной вентилятор{m}%i %%{e}", int(self.exhaust_pct)))
     tasmota.web_send_decimal(string.format("{s}Баланс приток/вытяжка{m}%i %%{e}", int(self.exhaust_mult * 100)))
+    tasmota.web_send_decimal(string.format("{s}Баланс режима вытяжки{m}%i %%{e}", int(self.exhaust_mode_mult * 100)))
   end
 
   def json_append()
-    tasmota.response_append(string.format(',\"Fans\":{\"Supply\":%i,\"Exhaust\":%i,\"Balance\":%i,\"Unit\":\"%%\"}', int(self.supply_pct), int(self.exhaust_pct), int(self.exhaust_mult * 100)))
+    tasmota.response_append(string.format(',\"Fans\":{\"Supply\":%i,\"Exhaust\":%i,\"Balance\":%i,\"ExhaustModeBalance\":%i,\"Unit\":\"%%\"}', int(self.supply_pct), int(self.exhaust_pct), int(self.exhaust_mult * 100), int(self.exhaust_mode_mult * 100)))
   end
 
   def every_second()
@@ -307,6 +316,28 @@ tasmota.add_cmd('ExhaustMultiplier', def(cmd, idx, payload)
     fan_ctrl.set_both(fan_ctrl.power_level)
   end
   tasmota.resp_cmnd(string.format('{"ExhaustMultiplier":%i}', int(m * 100)))
+end)
+
+tasmota.add_cmd('ExhaustModeMultiplier', def(cmd, idx, payload)
+  # Accept 50-150 (percent) or 0.5-1.5 (multiplier) for exhaust mode balance
+  var m = json.load(payload)
+  if m == nil m = real(payload) end
+  # Convert percent to multiplier if > 2
+  if m > 2 m = m / 100.0 end
+  # Clamp to valid range 0.5-1.5
+  if m < 0.5 m = 0.5 end
+  if m > 1.5 m = 1.5 end
+  fan_ctrl.exhaust_mode_mult = m
+  # Save to persist
+  persist.exhaust_mode_mult = m
+  persist.save()
+  # Re-apply current power level with new balance if in exhaust mode
+  var in_exhaust_mode = false
+  try in_exhaust_mode = global.exhaust_mode != nil && global.exhaust_mode.is_active() except .. end
+  if in_exhaust_mode && fan_ctrl.power_level > 0 && fan_ctrl.valve_open
+    fan_ctrl.set_both(fan_ctrl.power_level)
+  end
+  tasmota.resp_cmnd(string.format('{"ExhaustModeMultiplier":%i}', int(m * 100)))
 end)
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)
