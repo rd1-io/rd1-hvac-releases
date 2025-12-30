@@ -1,5 +1,8 @@
 import string
 
+# Initialize OTA flag if not exists
+if global.ota_in_progress == nil global.ota_in_progress = false end
+
 class ErrorHandler
   static var MAO4_ADDR = 109
   static var DI_ADDR = 140
@@ -64,26 +67,46 @@ class ErrorHandler
 
 
   def poll_mao4_counter()
-    tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":1,"tag":"err:mao4","quiet":30,"retries":2}', self.MAO4_ADDR, self.MAO4_COUNTER_REG))
+    if global.ota_in_progress return end
+    try
+      tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":1,"tag":"err:mao4","quiet":30,"retries":2}', self.MAO4_ADDR, self.MAO4_COUNTER_REG))
+    except .. as e, m
+      print("[ERR] poll_mao4_counter failed:", e, m)
+    end
   end
 
   def poll_di_batch()
+    if global.ota_in_progress return end
     var now = tasmota.millis()
     if now - self.last_di_poll_ms < 1000 return end
     self.last_di_poll_ms = now
-    tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":%d,"tag":"err:di","quiet":30,"retries":2}', self.DI_ADDR, self.DI_START_REG, self.DI_REG_COUNT))
+    try
+      tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":%d,"tag":"err:di","quiet":30,"retries":2}', self.DI_ADDR, self.DI_START_REG, self.DI_REG_COUNT))
+    except .. as e, m
+      print("[ERR] poll_di_batch failed:", e, m)
+    end
   end
 
   def emergency_fan_stop()
-    tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:emrg","quiet":30,"retries":3}', self.MAO4_ADDR, self.SUPPLY_REG))
-    tasmota.set_timer(100, /-> tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:emrg","quiet":30,"retries":3}', self.MAO4_ADDR, self.EXHAUST_REG)))
+    try
+      tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:emrg","quiet":30,"retries":3}', self.MAO4_ADDR, self.SUPPLY_REG))
+    except .. as e, m
+      print("[ERR] emergency_fan_stop supply failed:", e, m)
+    end
+    tasmota.set_timer(100, def()
+      try
+        tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:emrg","quiet":30,"retries":3}', self.MAO4_ADDR, self.EXHAUST_REG))
+      except .. as e, m
+        print("[ERR] emergency_fan_stop exhaust failed:", e, m)
+      end
+    end)
   end
 
   def restore_mao4_channels()
-    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.SUPPLY_REG))
-    tasmota.set_timer(200, /-> tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.EXHAUST_REG)))
-    tasmota.set_timer(400, /-> tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":5,"startaddress":%d,"type":"bit","count":1,"values":[1],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.SUPPLY_REG)))
-    tasmota.set_timer(600, /-> tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":5,"startaddress":%d,"type":"bit","count":1,"values":[1],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.EXHAUST_REG)))
+    try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.SUPPLY_REG)) except .. end
+    tasmota.set_timer(200, def() try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.EXHAUST_REG)) except .. end end)
+    tasmota.set_timer(400, def() try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":5,"startaddress":%d,"type":"bit","count":1,"values":[1],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.SUPPLY_REG)) except .. end end)
+    tasmota.set_timer(600, def() try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":5,"startaddress":%d,"type":"bit","count":1,"values":[1],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.EXHAUST_REG)) except .. end end)
   end
 
   def on_mao4_counter(val)
@@ -178,7 +201,7 @@ class ErrorHandler
     self.pause_set_ms = now
     self.error_mask = self.error_mask & (0xFFFF ^ self.ERR_PAUSE)
     print("[PAUSE] System resumed")
-    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:pclr","quiet":60,"retries":2}', self.LCD_ADDR, self.PAUSE_RELEASE_REG))
+    try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:pclr","quiet":60,"retries":2}', self.LCD_ADDR, self.PAUSE_RELEASE_REG)) except .. end
     self.sync_lcd(false)
   end
 
@@ -209,11 +232,16 @@ class ErrorHandler
   end
 
   def sync_lcd_now(critical)
+    if global.ota_in_progress return end
     var now = tasmota.millis()
     var cmd_name = critical ? "MBGateCritical" : "MBGate"
-    tasmota.cmd(string.format('%s {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"err:lcd","quiet":60,"retries":2}', cmd_name, self.LCD_ADDR, self.ERROR_REG, self.error_mask))
-    self.last_sent_mask = self.error_mask
-    self.last_sync_ms = now
+    try
+      tasmota.cmd(string.format('%s {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"err:lcd","quiet":60,"retries":2}', cmd_name, self.LCD_ADDR, self.ERROR_REG, self.error_mask))
+      self.last_sent_mask = self.error_mask
+      self.last_sync_ms = now
+    except .. as e, m
+      print("[ERR] sync_lcd_now failed:", e, m)
+    end
   end
 
   def sync_lcd(force)
@@ -251,7 +279,7 @@ class ErrorHandler
     elif bit == 15
       self.release_pause()
     end
-    tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:ack","quiet":30,"retries":3}', self.LCD_ADDR, self.RESET_REG))
+    try tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:ack","quiet":30,"retries":3}', self.LCD_ADDR, self.RESET_REG)) except .. end
     tasmota.set_timer(200, /-> self.sync_lcd(true))
   end
 

@@ -1,6 +1,9 @@
 # OTA Update Script for Berry files
 # Downloads all .be files from GitHub releases repository
 
+# Global flag to pause background tasks during OTA
+global.ota_in_progress = false
+
 var OTA_FILES = [
   "autoexec.be",
   "preinit.be", 
@@ -39,6 +42,8 @@ end
 def ota_check_update()
   print("OTA: Checking for updates...")
   var wc = webclient()
+  wc.set_useragent("Tasmota/OTA")
+  wc.set_follow_redirects(true)
   wc.begin(OTA_VERSION_URL)
   var code = wc.GET()
   if code == 200
@@ -60,6 +65,11 @@ def ota_check_update()
     end
   else
     print("OTA: Failed to check version, HTTP", code)
+    if code < 0
+      print("OTA: Network error (negative code)")
+    elif code == 1
+      print("OTA: Connection/TLS error - check internet/SSL")
+    end
   end
   wc.close()
   return nil
@@ -70,6 +80,8 @@ def ota_download_file(name)
   var url = OTA_BASE_URL + name
   print("OTA: Downloading", name)
   var wc = webclient()
+  wc.set_useragent("Tasmota/OTA")
+  wc.set_follow_redirects(true)
   wc.begin(url)
   var code = wc.GET()
   if code == 200
@@ -92,10 +104,15 @@ def ota_start_update()
   print("OTA: Starting Berry files update...")
   print("OTA: Base URL:", OTA_BASE_URL)
   
+  # Pause background tasks
+  global.ota_in_progress = true
+  print("OTA: Background tasks paused")
+  
   # First check version
   var version_info = ota_check_update()
   if version_info == nil
     print("OTA: No update needed or cannot get version info")
+    global.ota_in_progress = false
     return false
   end
   
@@ -117,11 +134,16 @@ def ota_start_update()
   if failed == 0
     ota_save_version(new_version)
     print("OTA: All files updated to version", new_version)
+    # Send success status (2) to LCD
+    try global.lcd_presets.write_u16(400, 2) except .. end
     print("OTA: Restarting in 2 seconds...")
     tasmota.set_timer(2000, /-> tasmota.cmd("Restart 1"))
     return true
   else
     print("OTA: Some files failed to download. Not restarting.")
+    # Send error status (3) to LCD
+    try global.lcd_presets.write_u16(400, 3) except .. end
+    global.ota_in_progress = false
     return false
   end
 end
@@ -130,6 +152,10 @@ end
 def ota_force_update()
   print("OTA: Force updating Berry files...")
   print("OTA: Base URL:", OTA_BASE_URL)
+  
+  # Pause background tasks
+  global.ota_in_progress = true
+  print("OTA: Background tasks paused")
   
   var success = 0
   var failed = 0
@@ -148,6 +174,8 @@ def ota_force_update()
   if failed == 0
     # Try to get and save new version
     var wc = webclient()
+    wc.set_useragent("Tasmota/OTA")
+    wc.set_follow_redirects(true)
     wc.begin(OTA_VERSION_URL)
     if wc.GET() == 200
       import json
@@ -157,11 +185,16 @@ def ota_force_update()
       end
     end
     wc.close()
+    # Send success status (2) to LCD
+    try global.lcd_presets.write_u16(400, 2) except .. end
     print("OTA: Restarting in 2 seconds...")
     tasmota.set_timer(2000, /-> tasmota.cmd("Restart 1"))
     return true
   else
     print("OTA: Some files failed to download. Not restarting.")
+    # Send error status (3) to LCD
+    try global.lcd_presets.write_u16(400, 3) except .. end
+    global.ota_in_progress = false
     return false
   end
 end

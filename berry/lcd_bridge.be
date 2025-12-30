@@ -1,6 +1,9 @@
 import string
 import json
 
+# Initialize OTA flag if not exists
+if global.ota_in_progress == nil global.ota_in_progress = false end
+
 class LCDBridge
   static var LCD_ADDR = 23
   static var STATUS_REG = 100
@@ -104,23 +107,39 @@ class LCDBridge
 
   def write_u16(reg, val)
     if val == nil return end
+    # Allow OTA status writes (reg 400) even during OTA
+    if global.ota_in_progress && reg != self.OTA_STATUS_REG return end
     val = val < 0 ? 0 : (val > 65535 ? 65535 : int(val))
-    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"lcd:w16:","quiet":100,"retries":2}', self.LCD_ADDR, reg, val))
+    try
+      tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"lcd:w16:","quiet":100,"retries":2}', self.LCD_ADDR, reg, val))
+    except .. as e, m
+      print("[LCD] write_u16 failed:", e, m)
+    end
   end
 
   def write_multi(reg, vals)
     if vals == nil || size(vals) == 0 return end
+    if global.ota_in_progress return end
     var buf = ""
     for i: 0 .. size(vals) - 1
       var v = vals[i] != nil ? int(vals[i]) : 0
       v = v < 0 ? 0 : (v > 65535 ? 65535 : v)
       buf += (i > 0 ? "," : "") + str(v)
     end
-    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":%d,"values":[%s],"tag":"lcd:env","quiet":120,"retries":2}', self.LCD_ADDR, reg, size(vals), buf))
+    try
+      tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":%d,"values":[%s],"tag":"lcd:env","quiet":120,"retries":2}', self.LCD_ADDR, reg, size(vals), buf))
+    except .. as e, m
+      print("[LCD] write_multi failed:", e, m)
+    end
   end
 
   def request_status()
-    tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":3,"startaddress":%d,"type":"uint16","count":%d,"timeout":3000,"tag":"lcd:sta","quiet":120,"retries":2}', self.LCD_ADDR, self.STATUS_REG, self.STATUS_COUNT))
+    if global.ota_in_progress return end
+    try
+      tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":3,"startaddress":%d,"type":"uint16","count":%d,"timeout":3000,"tag":"lcd:sta","quiet":120,"retries":2}', self.LCD_ADDR, self.STATUS_REG, self.STATUS_COUNT))
+    except .. as e, m
+      print("[LCD] request_status failed:", e, m)
+    end
   end
 
   def on_co2(ppm)
