@@ -1,10 +1,14 @@
 # OTA Update Script for Berry files
-# Downloads all .be files from GitHub releases repository
+# Two-phase update: Phase 1 deletes files, Phase 2 downloads after restart
+# This solves RAM limitation by having clean memory for downloads
+
+import persist
 
 # Global flag to pause background tasks during OTA
 global.ota_in_progress = false
 
-var OTA_FILES = [
+# Files to update (excluding autoexec.be and ota_update.be which are kept)
+var OTA_FILES_TO_DOWNLOAD = [
   "autoexec.be",
   "preinit.be", 
   "lcd_bridge.be",
@@ -16,7 +20,25 @@ var OTA_FILES = [
   "relay_control.be",
   "valve_shutter_bridge.be",
   "filter_wear.be",
+  "cloud_logger.be",
+  "exhaust_mode.be",
   "ota_update.be"
+]
+
+# Files to delete in Phase 1 (everything except autoexec.be and ota_update.be)
+var OTA_FILES_TO_DELETE = [
+  "preinit.be", 
+  "lcd_bridge.be",
+  "fan_control.be",
+  "error_handler.be",
+  "co2_sensor.be",
+  "sht20_sensors.be",
+  "modbus_utils.be",
+  "relay_control.be",
+  "valve_shutter_bridge.be",
+  "filter_wear.be",
+  "cloud_logger.be",
+  "exhaust_mode.be"
 ]
 
 # Public releases repository URL
@@ -25,22 +47,21 @@ var OTA_VERSION_URL = "https://raw.githubusercontent.com/rd1-io/rd1-hvac-release
 
 # Get current installed version from persist
 def ota_get_current_version()
-  import persist
   var ver = persist.find("berry_version")
   return ver != nil ? int(ver) : 0
 end
 
 # Save version to persist after successful update
 def ota_save_version(ver)
-  import persist
   persist.berry_version = int(ver)
   persist.save()
   print("OTA: Saved version", ver)
 end
 
-# Check for available updates (returns version info or nil)
+# Check for available updates (returns version number or nil)
 def ota_check_update()
   print("OTA: Checking for updates...")
+  tasmota.gc()
   var wc = webclient()
   wc.set_useragent("Tasmota/OTA")
   wc.set_follow_redirects(true)
@@ -49,15 +70,18 @@ def ota_check_update()
   if code == 200
     var json_str = wc.get_string()
     wc.close()
+    wc = nil
+    tasmota.gc()
     import json
     var info = json.load(json_str)
+    json_str = nil
     if info != nil
       var available = int(info["berry"])
       var current = ota_get_current_version()
       print("OTA: Available:", available, "Current:", current)
       if available > current
         print("OTA: Update available!")
-        return info
+        return available
       else
         print("OTA: Already up to date")
         return nil
@@ -65,20 +89,28 @@ def ota_check_update()
     end
   else
     print("OTA: Failed to check version, HTTP", code)
-    if code < 0
-      print("OTA: Network error (negative code)")
-    elif code == 1
-      print("OTA: Connection/TLS error - check internet/SSL")
-    end
   end
-  wc.close()
+  try wc.close() except .. end
   return nil
+end
+
+# Delete a file if it exists
+def ota_delete_file(name)
+  try
+    import path
+    if path.exists("/" + name)
+      path.remove("/" + name)
+      print("OTA: Deleted", name)
+    end
+  except .. as e
+    print("OTA: Cannot delete", name, e)
+  end
 end
 
 # Download a single file from GitHub
 def ota_download_file(name)
-  # Force garbage collection before each download to free memory
   tasmota.gc()
+  tasmota.delay(200)
   
   var url = OTA_BASE_URL + name
   print("OTA: Downloading", name)
@@ -90,11 +122,13 @@ def ota_download_file(name)
   if code == 200
     var content = wc.get_string()
     wc.close()
-    wc = nil  # Release webclient
+    wc = nil
+    tasmota.gc()
     
-    # Check for valid content
     if content == nil || size(content) < 10
-      print("OTA: FAILED -", name, "empty or too small:", size(content), "bytes")
+      print("OTA: FAILED -", name, "empty or too small")
+      content = nil
+      tasmota.gc()
       return false
     end
     
@@ -102,103 +136,93 @@ def ota_download_file(name)
     f.write(content)
     f.close()
     var sz = size(content)
-    content = nil  # Release content buffer
+    content = nil
+    tasmota.gc()
     print("OTA: OK -", name, "(", sz, "bytes)")
-    tasmota.gc()  # Clean up after write
     return true
   else
     print("OTA: FAILED -", name, "HTTP", code)
-    wc.close()
-    wc = nil
+    try wc.close() except .. end
     tasmota.gc()
     return false
   end
 end
 
-# Stop all background activity - timers and rules
-# Berry doesn't have API to list all timers/rules, so we use known names
-# tasmota.remove_timer/remove_rule silently ignores non-existent items
-def ota_stop_background()
-  # Known timer IDs used in our codebase
-  var timers = [
-    "lcd_status", "lcd_batch", "lcd_ds18",
-    "cloud_periodic", "relay_poll", "co2_auto_read",
-    "sht_ot", "sht_oh", "sht_it", "sht_ih",
-    "exhaust_mode_poll", "err_mao4", "err_di", "err_lcd",
-    "fan_shutdown_retry", "fan_shutdown_complete", "fan_verify"
-  ]
-  
-  # Known rule triggers used in our codebase  
-  var rules = [
-    "ModBusReceived", "RESULT", "Tele-JSON",
-    "Shutter1#Target", "Matter#Commissioning"
-  ]
-  
-  # Remove all timers
-  for t : timers
-    try tasmota.remove_timer(t) except .. end
-  end
-  
-  # Remove all rules
-  for r : rules
-    try tasmota.remove_rule(r) except .. end
-  end
-  
-  # Remove Power state rules (1-9)
-  for i : 1 .. 9
-    try tasmota.remove_rule("Power" + str(i) + "#State") except .. end
-  end
-  
-  print("OTA: Background stopped (timers + rules)")
-end
-
-# Download all Berry files and restart
+# ============================================
+# PHASE 1: Delete files and set pending flag
+# ============================================
 def ota_start_update()
-  print("OTA: Starting Berry files update...")
-  print("OTA: Base URL:", OTA_BASE_URL)
-  
-  # Pause background tasks
+  print("OTA: === PHASE 1: Preparing update ===")
   global.ota_in_progress = true
-  ota_stop_background()
   
-  # First check version
-  var version_info = ota_check_update()
-  if version_info == nil
-    print("OTA: No update needed or cannot get version info")
+  # Check for available updates first
+  var new_version = ota_check_update()
+  if new_version == nil
+    print("OTA: No update available")
     global.ota_in_progress = false
     return false
   end
   
-  var new_version = int(version_info["berry"])
+  print("OTA: Will update to version", new_version)
+  
+  # Delete all files except autoexec.be and ota_update.be
+  print("OTA: Deleting old files...")
+  for file : OTA_FILES_TO_DELETE
+    ota_delete_file(file)
+  end
+  
+  # Set pending flag with target version
+  persist.ota_pending = new_version
+  persist.save()
+  print("OTA: Set ota_pending =", new_version)
+  
+  # Restart to free memory
+  print("OTA: Restarting for Phase 2...")
+  tasmota.set_timer(1000, /-> tasmota.cmd("Restart 1"))
+  return true
+end
+
+# ============================================
+# PHASE 2: Download files (runs after restart)
+# ============================================
+def ota_continue_update()
+  var pending = persist.find("ota_pending")
+  if pending == nil
+    return false  # No pending update
+  end
+  
+  print("OTA: === PHASE 2: Downloading files ===")
+  print("OTA: Target version:", pending)
+  global.ota_in_progress = true
+  
   var success = 0
   var failed = 0
   
-  for file : OTA_FILES
+  for file : OTA_FILES_TO_DOWNLOAD
     if ota_download_file(file)
       success += 1
     else
       failed += 1
     end
-    tasmota.gc()  # Force garbage collection
-    tasmota.delay(1000)  # Longer delay for memory cleanup
+    tasmota.delay(500)
   end
   
   print("OTA: Download complete. Success:", success, "Failed:", failed)
   
+  # Clear pending flag
+  persist.ota_pending = nil
+  persist.save()
+  
   if failed == 0
-    ota_save_version(new_version)
-    print("OTA: All files updated to version", new_version)
-    # Send success status (2) to LCD
-    try global.lcd_presets.write_u16(400, 2) except .. end
-    print("OTA: Restarting in 2 seconds...")
+    ota_save_version(int(pending))
+    print("OTA: === UPDATE SUCCESSFUL ===")
+    print("OTA: Restarting with new firmware...")
     tasmota.set_timer(2000, /-> tasmota.cmd("Restart 1"))
     return true
   else
-    print("OTA: Some files failed to download.")
-    # Send error status (3) to LCD
-    try global.lcd_presets.write_u16(400, 3) except .. end
-    # Must restart to restore rules/timers that were removed
-    print("OTA: Restarting to restore system state...")
+    print("OTA: === UPDATE FAILED ===")
+    print("OTA: Some files failed. System may be incomplete.")
+    print("OTA: Try running update again or restore manually.")
     tasmota.set_timer(2000, /-> tasmota.cmd("Restart 1"))
     return false
   end
@@ -206,56 +230,46 @@ end
 
 # Force update (skip version check)
 def ota_force_update()
-  print("OTA: Force updating Berry files...")
-  print("OTA: Base URL:", OTA_BASE_URL)
-  
-  # Pause background tasks
+  print("OTA: === FORCE UPDATE ===")
   global.ota_in_progress = true
-  ota_stop_background()
   
-  var success = 0
-  var failed = 0
-  
-  for file : OTA_FILES
-    if ota_download_file(file)
-      success += 1
-    else
-      failed += 1
+  # Get latest version number
+  tasmota.gc()
+  var new_version = 0
+  var wc = webclient()
+  wc.set_useragent("Tasmota/OTA")
+  wc.set_follow_redirects(true)
+  wc.begin(OTA_VERSION_URL)
+  if wc.GET() == 200
+    import json
+    var info = json.load(wc.get_string())
+    if info != nil
+      new_version = int(info["berry"])
     end
-    tasmota.gc()  # Force garbage collection
-    tasmota.delay(1000)  # Longer delay for memory cleanup
+  end
+  wc.close()
+  wc = nil
+  tasmota.gc()
+  
+  if new_version == 0
+    new_version = ota_get_current_version() + 1
   end
   
-  print("OTA: Download complete. Success:", success, "Failed:", failed)
-  
-  if failed == 0
-    # Try to get and save new version
-    var wc = webclient()
-    wc.set_useragent("Tasmota/OTA")
-    wc.set_follow_redirects(true)
-    wc.begin(OTA_VERSION_URL)
-    if wc.GET() == 200
-      import json
-      var info = json.load(wc.get_string())
-      if info != nil
-        ota_save_version(int(info["berry"]))
-      end
-    end
-    wc.close()
-    # Send success status (2) to LCD
-    try global.lcd_presets.write_u16(400, 2) except .. end
-    print("OTA: Restarting in 2 seconds...")
-    tasmota.set_timer(2000, /-> tasmota.cmd("Restart 1"))
-    return true
-  else
-    print("OTA: Some files failed to download.")
-    # Send error status (3) to LCD
-    try global.lcd_presets.write_u16(400, 3) except .. end
-    # Must restart to restore rules/timers that were removed
-    print("OTA: Restarting to restore system state...")
-    tasmota.set_timer(2000, /-> tasmota.cmd("Restart 1"))
-    return false
+  # Delete all files except autoexec.be and ota_update.be
+  print("OTA: Deleting old files...")
+  for file : OTA_FILES_TO_DELETE
+    ota_delete_file(file)
   end
+  
+  # Set pending flag
+  persist.ota_pending = new_version
+  persist.save()
+  print("OTA: Set ota_pending =", new_version)
+  
+  # Restart for Phase 2
+  print("OTA: Restarting for Phase 2...")
+  tasmota.set_timer(1000, /-> tasmota.cmd("Restart 1"))
+  return true
 end
 
 # Export functions for external call
@@ -263,5 +277,15 @@ global.ota_start_update = ota_start_update
 global.ota_force_update = ota_force_update
 global.ota_check_update = ota_check_update
 global.ota_get_current_version = ota_get_current_version
+global.ota_continue_update = ota_continue_update
 
-print("OTA: Update module loaded. Version:", ota_get_current_version())
+# ============================================
+# AUTO-CHECK: Continue Phase 2 if pending
+# ============================================
+print("OTA: Module loaded. Version:", ota_get_current_version())
+
+if persist.find("ota_pending") != nil
+  print("OTA: Pending update detected!")
+  # Delay slightly to let system stabilize
+  tasmota.set_timer(3000, ota_continue_update)
+end
