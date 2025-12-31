@@ -50,6 +50,7 @@ class ModbusGate
   end
 
   def process_next()
+    if global.ota_in_progress return end  # Skip during OTA
     if self.busy != 0 || size(self.queue) == 0 return end
     var delta = tasmota.millis() - self.last_tx_ms
     var wait = self.queue[0]["quiet"] - delta
@@ -58,6 +59,7 @@ class ModbusGate
   end
 
   def do_send()
+    if global.ota_in_progress return end  # Skip during OTA
     if size(self.queue) == 0 return end
     self.busy = 1
     self.current = self.queue[0]

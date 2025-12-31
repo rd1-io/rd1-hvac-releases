@@ -49,7 +49,9 @@ end)
 tasmota.add_driver(co2_driver)
 
 def co2_timer_callback()
-  read_co2()
+  if !global.ota_in_progress
+    read_co2()
+  end
   tasmota.set_timer(30011, co2_timer_callback, "co2_auto_read")
 end
 

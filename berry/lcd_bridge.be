@@ -67,6 +67,10 @@ class LCDBridge
   end
 
   def status_timer()
+    if global.ota_in_progress
+      tasmota.set_timer(6099, /-> self.status_timer(), "lcd_status")
+      return
+    end
     self.fail_count += 1
     if self.fail_count >= 3 && !self.safety_triggered
       self.safety_shutdown()
@@ -76,11 +80,19 @@ class LCDBridge
   end
 
   def batch_timer()
+    if global.ota_in_progress
+      tasmota.set_timer(9034, /-> self.batch_timer(), "lcd_batch")
+      return
+    end
     self.publish_batch()
     tasmota.set_timer(9034, /-> self.batch_timer(), "lcd_batch")
   end
 
   def ds18_timer()
+    if global.ota_in_progress
+      tasmota.set_timer(29989, /-> self.ds18_timer(), "lcd_ds18")
+      return
+    end
     var r = tasmota.cmd("Status 10")
     if r != nil
       var sns = r.find("StatusSNS")

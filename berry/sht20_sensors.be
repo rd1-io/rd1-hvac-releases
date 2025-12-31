@@ -77,10 +77,10 @@ tasmota.add_cmd('IndoorSHTValue', def(cmd, idx, payload)
   tasmota.resp_cmnd(string.format("T:%.1f C, H:%.1f %%", sht20_indoor.temp_c != nil ? sht20_indoor.temp_c : 0, sht20_indoor.humi_pct != nil ? sht20_indoor.humi_pct : 0))
 end)
 
-def outdoor_temp_timer() sht20_outdoor.read_temp() tasmota.set_timer(119993, outdoor_temp_timer, "sht_ot") end
-def outdoor_humi_timer() sht20_outdoor.read_humi() tasmota.set_timer(119971, outdoor_humi_timer, "sht_oh") end
-def indoor_temp_timer() sht20_indoor.read_temp() tasmota.set_timer(29981, indoor_temp_timer, "sht_it") end
-def indoor_humi_timer() sht20_indoor.read_humi() tasmota.set_timer(30013, indoor_humi_timer, "sht_ih") end
+def outdoor_temp_timer() if !global.ota_in_progress sht20_outdoor.read_temp() end tasmota.set_timer(119993, outdoor_temp_timer, "sht_ot") end
+def outdoor_humi_timer() if !global.ota_in_progress sht20_outdoor.read_humi() end tasmota.set_timer(119971, outdoor_humi_timer, "sht_oh") end
+def indoor_temp_timer() if !global.ota_in_progress sht20_indoor.read_temp() end tasmota.set_timer(29981, indoor_temp_timer, "sht_it") end
+def indoor_humi_timer() if !global.ota_in_progress sht20_indoor.read_humi() end tasmota.set_timer(30013, indoor_humi_timer, "sht_ih") end
 
 tasmota.set_timer(4000, outdoor_temp_timer, "sht_ot")
 tasmota.set_timer(34000, outdoor_humi_timer, "sht_oh")

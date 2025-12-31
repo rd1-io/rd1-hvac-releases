@@ -51,16 +51,19 @@ class ErrorHandler
   end
 
   def start_mao4_poll()
+    if global.ota_in_progress return end  # Skip during OTA
     self.poll_mao4_counter()
     tasmota.set_timer(10007, /-> self.start_mao4_poll(), "err_mao4")
   end
 
   def start_di_poll()
+    if global.ota_in_progress return end  # Skip during OTA
     self.poll_di_batch()
     tasmota.set_timer(9973, /-> self.start_di_poll(), "err_di")
   end
 
   def start_lcd_sync()
+    if global.ota_in_progress return end  # Skip during OTA
     self.sync_lcd_periodic()
     tasmota.set_timer(59987, /-> self.start_lcd_sync(), "err_lcd")
   end

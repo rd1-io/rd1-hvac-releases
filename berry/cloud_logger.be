@@ -10,7 +10,6 @@
 
 import string
 import persist
-import webclient
 
 class CloudLogger
   static var SHEETS_INTERVAL_MS = 3600000   # Send to sheets every hour
@@ -50,7 +49,9 @@ class CloudLogger
   end
   
   def start_periodic()
-    self.check_and_send()
+    if !global.ota_in_progress
+      self.check_and_send()
+    end
     tasmota.set_timer(60000, /-> self.start_periodic(), "cloud_periodic")
   end
   

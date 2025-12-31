@@ -14,6 +14,10 @@ class ExhaustModeController
   end
 
   def start_poll()
+    if global.ota_in_progress
+      tasmota.set_timer(10007, /-> self.start_poll(), "exhaust_mode_poll")
+      return
+    end
     self.poll_mode_register()
     tasmota.set_timer(10007, /-> self.start_poll(), "exhaust_mode_poll")
   end

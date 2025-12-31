@@ -74,7 +74,9 @@ for ch: 1 .. 6
 end
 
 def relay_poll_timer()
-  relay_ctrl.poll_all_channels()
+  if !global.ota_in_progress
+    relay_ctrl.poll_all_channels()
+  end
   tasmota.set_timer(9967, relay_poll_timer, "relay_poll")
 end
 

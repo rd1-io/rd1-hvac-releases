@@ -86,17 +86,59 @@ def ota_download_file(name)
   var code = wc.GET()
   if code == 200
     var content = wc.get_string()
+    wc.close()
+    # Check for valid content
+    if content == nil || size(content) < 10
+      print("OTA: FAILED -", name, "empty or too small:", size(content), "bytes")
+      return false
+    end
     var f = open("/" + name, "w")
     f.write(content)
     f.close()
     print("OTA: OK -", name, "(", size(content), "bytes)")
-    wc.close()
     return true
   else
     print("OTA: FAILED -", name, "HTTP", code)
     wc.close()
     return false
   end
+end
+
+# Stop all background activity - timers and rules
+# Berry doesn't have API to list all timers/rules, so we use known names
+# tasmota.remove_timer/remove_rule silently ignores non-existent items
+def ota_stop_background()
+  # Known timer IDs used in our codebase
+  var timers = [
+    "lcd_status", "lcd_batch", "lcd_ds18",
+    "cloud_periodic", "relay_poll", "co2_auto_read",
+    "sht_ot", "sht_oh", "sht_it", "sht_ih",
+    "exhaust_mode_poll", "err_mao4", "err_di", "err_lcd",
+    "fan_shutdown_retry", "fan_shutdown_complete", "fan_verify"
+  ]
+  
+  # Known rule triggers used in our codebase  
+  var rules = [
+    "ModBusReceived", "RESULT", "Tele-JSON",
+    "Shutter1#Target", "Matter#Commissioning"
+  ]
+  
+  # Remove all timers
+  for t : timers
+    try tasmota.remove_timer(t) except .. end
+  end
+  
+  # Remove all rules
+  for r : rules
+    try tasmota.remove_rule(r) except .. end
+  end
+  
+  # Remove Power state rules (1-9)
+  for i : 1 .. 9
+    try tasmota.remove_rule("Power" + str(i) + "#State") except .. end
+  end
+  
+  print("OTA: Background stopped (timers + rules)")
 end
 
 # Download all Berry files and restart
@@ -106,7 +148,7 @@ def ota_start_update()
   
   # Pause background tasks
   global.ota_in_progress = true
-  print("OTA: Background tasks paused")
+  ota_stop_background()
   
   # First check version
   var version_info = ota_check_update()
@@ -126,7 +168,7 @@ def ota_start_update()
     else
       failed += 1
     end
-    tasmota.delay(100)
+    tasmota.delay(500)  # Longer delay between downloads
   end
   
   print("OTA: Download complete. Success:", success, "Failed:", failed)
@@ -140,10 +182,12 @@ def ota_start_update()
     tasmota.set_timer(2000, /-> tasmota.cmd("Restart 1"))
     return true
   else
-    print("OTA: Some files failed to download. Not restarting.")
+    print("OTA: Some files failed to download.")
     # Send error status (3) to LCD
     try global.lcd_presets.write_u16(400, 3) except .. end
-    global.ota_in_progress = false
+    # Must restart to restore rules/timers that were removed
+    print("OTA: Restarting to restore system state...")
+    tasmota.set_timer(2000, /-> tasmota.cmd("Restart 1"))
     return false
   end
 end
@@ -155,7 +199,7 @@ def ota_force_update()
   
   # Pause background tasks
   global.ota_in_progress = true
-  print("OTA: Background tasks paused")
+  ota_stop_background()
   
   var success = 0
   var failed = 0
@@ -166,7 +210,7 @@ def ota_force_update()
     else
       failed += 1
     end
-    tasmota.delay(100)
+    tasmota.delay(500)  # Longer delay between downloads
   end
   
   print("OTA: Download complete. Success:", success, "Failed:", failed)
@@ -191,10 +235,12 @@ def ota_force_update()
     tasmota.set_timer(2000, /-> tasmota.cmd("Restart 1"))
     return true
   else
-    print("OTA: Some files failed to download. Not restarting.")
+    print("OTA: Some files failed to download.")
     # Send error status (3) to LCD
     try global.lcd_presets.write_u16(400, 3) except .. end
-    global.ota_in_progress = false
+    # Must restart to restore rules/timers that were removed
+    print("OTA: Restarting to restore system state...")
+    tasmota.set_timer(2000, /-> tasmota.cmd("Restart 1"))
     return false
   end
 end
