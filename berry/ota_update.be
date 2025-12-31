@@ -77,6 +77,9 @@ end
 
 # Download a single file from GitHub
 def ota_download_file(name)
+  # Force garbage collection before each download to free memory
+  tasmota.gc()
+  
   var url = OTA_BASE_URL + name
   print("OTA: Downloading", name)
   var wc = webclient()
@@ -87,19 +90,27 @@ def ota_download_file(name)
   if code == 200
     var content = wc.get_string()
     wc.close()
+    wc = nil  # Release webclient
+    
     # Check for valid content
     if content == nil || size(content) < 10
       print("OTA: FAILED -", name, "empty or too small:", size(content), "bytes")
       return false
     end
+    
     var f = open("/" + name, "w")
     f.write(content)
     f.close()
-    print("OTA: OK -", name, "(", size(content), "bytes)")
+    var sz = size(content)
+    content = nil  # Release content buffer
+    print("OTA: OK -", name, "(", sz, "bytes)")
+    tasmota.gc()  # Clean up after write
     return true
   else
     print("OTA: FAILED -", name, "HTTP", code)
     wc.close()
+    wc = nil
+    tasmota.gc()
     return false
   end
 end
@@ -168,7 +179,8 @@ def ota_start_update()
     else
       failed += 1
     end
-    tasmota.delay(500)  # Longer delay between downloads
+    tasmota.gc()  # Force garbage collection
+    tasmota.delay(1000)  # Longer delay for memory cleanup
   end
   
   print("OTA: Download complete. Success:", success, "Failed:", failed)
@@ -210,7 +222,8 @@ def ota_force_update()
     else
       failed += 1
     end
-    tasmota.delay(500)  # Longer delay between downloads
+    tasmota.gc()  # Force garbage collection
+    tasmota.delay(1000)  # Longer delay for memory cleanup
   end
   
   print("OTA: Download complete. Success:", success, "Failed:", failed)
