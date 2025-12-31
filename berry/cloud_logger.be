@@ -1,12 +1,10 @@
 # Cloud Logger Module for HVAC System
-# Sends data to Google Sheets and Telegram notifications
+# Sends data to Google Sheets
+# Telegram functionality is commented out for now
 #
 # Commands:
 #   CloudLoggerUrl <url>       - Set Google Apps Script URL
-#   CloudLoggerTgToken <token> - Set Telegram bot token
-#   CloudLoggerTgChat <id>     - Set Telegram chat ID
 #   CloudLoggerTest            - Send test data to Google Sheets
-#   CloudLoggerTgTest          - Send test message to Telegram
 #   CloudLoggerStatus          - Show current configuration
 #   CloudLoggerSend            - Force send current data
 
@@ -18,21 +16,22 @@ class CloudLogger
   static var SHEETS_INTERVAL_MS = 3600000   # Send to sheets every hour
   static var RETRY_INTERVAL_MS = 300000     # Retry failed sends every 5 min
   static var MAX_RETRIES = 3
+  static var DEFAULT_SHEETS_URL = "https://script.google.com/macros/s/AKfycbxwvDoZmVREi795gBMTy3LMJEB6_tfZWGnTthxxIZdEOr8somd55TvU4IkhdLPUXuSP/exec"
   
   var sheets_url          # Google Apps Script URL
-  var tg_token            # Telegram bot token
-  var tg_chat_id          # Telegram chat ID
+  # var tg_token            # Telegram bot token (disabled)
+  # var tg_chat_id          # Telegram chat ID (disabled)
   var last_sheets_send_ms # Last successful send to sheets
-  var last_error_mask     # Last error mask sent to Telegram
+  var last_error_mask     # Last error mask
   var pending_send        # Flag for pending send
   var retry_count         # Current retry count
   var enabled             # Module enabled flag
   
   def init()
     persist.load()
-    self.sheets_url = persist.find('cl_sheets_url', '')
-    self.tg_token = persist.find('cl_tg_token', '')
-    self.tg_chat_id = persist.find('cl_tg_chat', '')
+    self.sheets_url = persist.find('cl_sheets_url', self.DEFAULT_SHEETS_URL)
+    # self.tg_token = persist.find('cl_tg_token', '')
+    # self.tg_chat_id = persist.find('cl_tg_chat', '')
     self.last_sheets_send_ms = 0
     self.last_error_mask = 0
     self.pending_send = false
@@ -46,10 +45,7 @@ class CloudLogger
     
     print("[CloudLogger] Initialized")
     if self.sheets_url != ''
-      print(string.format("[CloudLogger] Sheets URL: %s...", self.sheets_url[0..50]))
-    end
-    if self.tg_token != ''
-      print("[CloudLogger] Telegram configured")
+      print(string.format("[CloudLogger] Sheets URL configured"))
     end
   end
   
@@ -68,9 +64,12 @@ class CloudLogger
       self.send_to_sheets()
     end
     
-    # Check for error changes (for Telegram)
-    self.check_error_changes()
+    # Telegram check disabled
+    # self.check_error_changes()
   end
+  
+  #-
+  # Telegram functionality - commented out for now
   
   def check_error_changes()
     if self.tg_token == '' || self.tg_chat_id == '' return end
@@ -86,7 +85,6 @@ class CloudLogger
       var old_mask = self.last_error_mask
       self.last_error_mask = current_mask
       
-      # Determine what changed
       var new_errors = current_mask & (current_mask ^ old_mask)
       var cleared_errors = old_mask & (current_mask ^ old_mask)
       
@@ -113,7 +111,6 @@ class CloudLogger
     
     var emoji = is_error ? "⚠️" : "✅"
     var status_emoji = is_error ? "🔴" : "🟢"
-    var status_text = is_error ? "ОШИБКА" : "СБРОШЕНО"
     var header = is_error ? "HVAC ОШИБКА" : "HVAC ОШИБКА СБРОШЕНА"
     
     var errors = []
@@ -149,7 +146,6 @@ class CloudLogger
       self.url_encode(message)
     )
     
-    # Use async HTTP request
     tasmota.set_timer(0, /-> self.http_get(url, "telegram"))
   end
   
@@ -168,6 +164,25 @@ class CloudLogger
       print(string.format("[CloudLogger] %s error: %s %s", tag, e, m))
     end
   end
+  
+  def url_encode(s)
+    var result = ""
+    for i: 0 .. size(s) - 1
+      var c = s[i]
+      var code = c[0]
+      if (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || c == '-' || c == '_' || c == '.' || c == '~'
+        result += c
+      elif c == ' '
+        result += "%20"
+      else
+        result += string.format("%%%02X", code)
+      end
+    end
+    return result
+  end
+  
+  # End of Telegram functionality
+  -#
   
   def send_to_sheets()
     if self.sheets_url == ''
@@ -232,6 +247,7 @@ class CloudLogger
       cl.add_header("Content-Type", "application/json")
       
       var json = self.to_json(data)
+      print(string.format("[CloudLogger] Sending: %s", json))
       var rc = cl.POST(json)
       
       if rc == 200 || rc == 302
@@ -279,22 +295,6 @@ class CloudLogger
     return "{" + parts.concat(",") + "}"
   end
   
-  def url_encode(s)
-    var result = ""
-    for i: 0 .. size(s) - 1
-      var c = s[i]
-      var code = c[0]  # Get ASCII code
-      if (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57) || c == '-' || c == '_' || c == '.' || c == '~'
-        result += c
-      elif c == ' '
-        result += "%20"
-      else
-        result += string.format("%%%02X", code)
-      end
-    end
-    return result
-  end
-  
   def set_sheets_url(url)
     self.sheets_url = url
     persist.cl_sheets_url = url
@@ -302,6 +302,7 @@ class CloudLogger
     print(string.format("[CloudLogger] Sheets URL set: %s", url))
   end
   
+  #-
   def set_tg_token(token)
     self.tg_token = token
     persist.cl_tg_token = token
@@ -315,12 +316,14 @@ class CloudLogger
     persist.save()
     print(string.format("[CloudLogger] Telegram chat ID set: %s", chat_id))
   end
+  -#
   
   def test_sheets()
     print("[CloudLogger] Testing Sheets...")
     self.send_to_sheets()
   end
   
+  #-
   def test_telegram()
     if self.tg_token == '' || self.tg_chat_id == ''
       print("[CloudLogger] Telegram not configured")
@@ -331,29 +334,19 @@ class CloudLogger
     var msg = string.format("🔔 HVAC Test Message\n\nТестовое сообщение от вентиляционной системы.\nВремя: %s", time_str)
     self.send_telegram(msg)
   end
+  -#
   
   def get_status()
     var sheets_ok = self.sheets_url != '' ? "configured" : "not set"
-    var tg_ok = (self.tg_token != '' && self.tg_chat_id != '') ? "configured" : "not set"
     var last_send = self.last_sheets_send_ms > 0 ? string.format("%d min ago", (tasmota.millis() - self.last_sheets_send_ms) / 60000) : "never"
-    return string.format('{"Sheets":"%s","Telegram":"%s","LastSend":"%s","Enabled":%s}', 
-      sheets_ok, tg_ok, last_send, self.enabled ? "true" : "false")
+    return string.format('{"Sheets":"%s","LastSend":"%s","Enabled":%s}', 
+      sheets_ok, last_send, self.enabled ? "true" : "false")
   end
   
-  # Called by error_handler when error state changes
+  # Called by error_handler when error state changes (for future Telegram)
   def on_error_change(new_mask, old_mask)
-    if self.tg_token == '' || self.tg_chat_id == '' return end
-    
-    var new_errors = new_mask & (new_mask ^ old_mask)
-    var cleared_errors = old_mask & (new_mask ^ old_mask)
-    
-    if new_errors != 0
-      self.send_error_notification(new_errors, true)
-    end
-    if cleared_errors != 0
-      self.send_error_notification(cleared_errors, false)
-    end
-    
+    # Telegram disabled for now
+    # Just update the mask
     self.last_error_mask = new_mask
   end
   
@@ -376,6 +369,8 @@ tasmota.add_cmd('CloudLoggerUrl', def(cmd, idx, payload)
   end
 end)
 
+#-
+# Telegram commands disabled
 tasmota.add_cmd('CloudLoggerTgToken', def(cmd, idx, payload)
   if payload == nil || payload == ""
     tasmota.resp_cmnd('{"CloudLoggerTgToken":"***"}')
@@ -394,13 +389,14 @@ tasmota.add_cmd('CloudLoggerTgChat', def(cmd, idx, payload)
   end
 end)
 
-tasmota.add_cmd('CloudLoggerTest', def(cmd, idx, payload)
-  cloud_logger.test_sheets()
-  tasmota.resp_cmnd_done()
-end)
-
 tasmota.add_cmd('CloudLoggerTgTest', def(cmd, idx, payload)
   cloud_logger.test_telegram()
+  tasmota.resp_cmnd_done()
+end)
+-#
+
+tasmota.add_cmd('CloudLoggerTest', def(cmd, idx, payload)
+  cloud_logger.test_sheets()
   tasmota.resp_cmnd_done()
 end)
 
@@ -412,4 +408,3 @@ tasmota.add_cmd('CloudLoggerSend', def(cmd, idx, payload)
   cloud_logger.force_send()
   tasmota.resp_cmnd_done()
 end)
-
