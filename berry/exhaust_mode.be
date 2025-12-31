@@ -58,6 +58,7 @@ var exhaust_mode = ExhaustModeController()
 global.exhaust_mode = exhaust_mode
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)
+  if global.ota_in_progress return end  # Skip during OTA
   if value == nil return end
   var dev = value['DeviceAddress']
   var fc = value['FunctionCode']

@@ -96,6 +96,7 @@ end
 var modbus_gate = ModbusGate()
 
 tasmota.add_rule("RESULT", def(value, trigger)
+  if global.ota_in_progress return end  # Skip during OTA
   if value == nil return end
   try
     var send = value["ModbusSend"]

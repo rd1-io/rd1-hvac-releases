@@ -38,6 +38,7 @@ tasmota.add_cmd('CO2Value', def(cmd, idx, payload)
 end)
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)
+  if global.ota_in_progress return end  # Skip during OTA
   if value['DeviceAddress'] == 1 && value['FunctionCode'] == 3 && value['StartAddress'] == 2
     var vals = nil
     try vals = value['Values'] except .. as e return end

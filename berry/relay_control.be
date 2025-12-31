@@ -33,6 +33,7 @@ class RelayController
   end
 
   def handle_modbus_received(value, trigger)
+    if global.ota_in_progress return end  # Skip during OTA
     if value == nil || value["DeviceAddress"] != self.ADDR || value["FunctionCode"] != 1 return end
     var sa = value["StartAddress"]
     var vals = value["Values"]

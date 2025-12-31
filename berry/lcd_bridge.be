@@ -441,6 +441,7 @@ var lcd_bridge = LCDBridge()
 global.lcd_presets = lcd_bridge
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)
+  if global.ota_in_progress return end  # Skip during OTA
   if value == nil return end
   var dev = value['DeviceAddress']
   var fc = value['FunctionCode']
@@ -510,12 +511,12 @@ def parse_ds18(js)
   if t1 != nil || t2 != nil || t3 != nil lcd_bridge.on_ds18(t1, t2, t3) end
 end
 
-tasmota.add_rule("RESULT", def(v, t) if v != nil parse_ds18(v.find("StatusSNS", v)) end end)
-tasmota.add_rule("Tele-JSON", def(v, t) if v != nil parse_ds18(v) end end)
-tasmota.add_rule("Power7#State", def(v, t) lcd_bridge.on_power_state(7, v) end)
-tasmota.add_rule("Power8#State", def(v, t) lcd_bridge.on_power_state(8, v) end)
-tasmota.add_rule("Power9#State", def(v, t) lcd_bridge.on_power_state(9, v) end)
-tasmota.add_rule("Matter#Commissioning", def(v, t) if v != nil lcd_bridge.write_u16(300, int(v)) end end)
+tasmota.add_rule("RESULT", def(v, t) if !global.ota_in_progress && v != nil parse_ds18(v.find("StatusSNS", v)) end end)
+tasmota.add_rule("Tele-JSON", def(v, t) if !global.ota_in_progress && v != nil parse_ds18(v) end end)
+tasmota.add_rule("Power7#State", def(v, t) if !global.ota_in_progress lcd_bridge.on_power_state(7, v) end end)
+tasmota.add_rule("Power8#State", def(v, t) if !global.ota_in_progress lcd_bridge.on_power_state(8, v) end end)
+tasmota.add_rule("Power9#State", def(v, t) if !global.ota_in_progress lcd_bridge.on_power_state(9, v) end end)
+tasmota.add_rule("Matter#Commissioning", def(v, t) if !global.ota_in_progress && v != nil lcd_bridge.write_u16(300, int(v)) end end)
 
 tasmota.add_cmd('LCDWriteCO2', def(cmd, idx, payload)
   if payload != nil && payload != "" lcd_bridge.on_co2(int(payload)) end
