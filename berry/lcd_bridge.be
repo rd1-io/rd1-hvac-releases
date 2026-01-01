@@ -1,9 +1,6 @@
 import string
 import json
 
-# Initialize OTA flag if not exists
-if global.ota_in_progress == nil global.ota_in_progress = false end
-
 class LCDBridge
   static var LCD_ADDR = 23
   static var STATUS_REG = 100
@@ -67,10 +64,6 @@ class LCDBridge
   end
 
   def status_timer()
-    if global.ota_in_progress
-      tasmota.set_timer(6099, /-> self.status_timer(), "lcd_status")
-      return
-    end
     self.fail_count += 1
     if self.fail_count >= 3 && !self.safety_triggered
       self.safety_shutdown()
@@ -80,19 +73,11 @@ class LCDBridge
   end
 
   def batch_timer()
-    if global.ota_in_progress
-      tasmota.set_timer(9034, /-> self.batch_timer(), "lcd_batch")
-      return
-    end
     self.publish_batch()
     tasmota.set_timer(9034, /-> self.batch_timer(), "lcd_batch")
   end
 
   def ds18_timer()
-    if global.ota_in_progress
-      tasmota.set_timer(29989, /-> self.ds18_timer(), "lcd_ds18")
-      return
-    end
     var r = tasmota.cmd("Status 10")
     if r != nil
       var sns = r.find("StatusSNS")
@@ -119,8 +104,6 @@ class LCDBridge
 
   def write_u16(reg, val)
     if val == nil return end
-    # Allow OTA status writes (reg 400) even during OTA
-    if global.ota_in_progress && reg != self.OTA_STATUS_REG return end
     val = val < 0 ? 0 : (val > 65535 ? 65535 : int(val))
     try
       tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"lcd:w16:","quiet":100,"retries":2}', self.LCD_ADDR, reg, val))
@@ -131,7 +114,6 @@ class LCDBridge
 
   def write_multi(reg, vals)
     if vals == nil || size(vals) == 0 return end
-    if global.ota_in_progress return end
     var buf = ""
     for i: 0 .. size(vals) - 1
       var v = vals[i] != nil ? int(vals[i]) : 0
@@ -146,7 +128,6 @@ class LCDBridge
   end
 
   def request_status()
-    if global.ota_in_progress return end
     try
       tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":3,"startaddress":%d,"type":"uint16","count":%d,"timeout":3000,"tag":"lcd:sta","quiet":120,"retries":2}', self.LCD_ADDR, self.STATUS_REG, self.STATUS_COUNT))
     except .. as e, m
@@ -453,7 +434,6 @@ var lcd_bridge = LCDBridge()
 global.lcd_presets = lcd_bridge
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)
-  if global.ota_in_progress return end  # Skip during OTA
   if value == nil return end
   var dev = value['DeviceAddress']
   var fc = value['FunctionCode']
@@ -523,12 +503,12 @@ def parse_ds18(js)
   if t1 != nil || t2 != nil || t3 != nil lcd_bridge.on_ds18(t1, t2, t3) end
 end
 
-tasmota.add_rule("RESULT", def(v, t) if !global.ota_in_progress && v != nil parse_ds18(v.find("StatusSNS", v)) end end)
-tasmota.add_rule("Tele-JSON", def(v, t) if !global.ota_in_progress && v != nil parse_ds18(v) end end)
-tasmota.add_rule("Power7#State", def(v, t) if !global.ota_in_progress lcd_bridge.on_power_state(7, v) end end)
-tasmota.add_rule("Power8#State", def(v, t) if !global.ota_in_progress lcd_bridge.on_power_state(8, v) end end)
-tasmota.add_rule("Power9#State", def(v, t) if !global.ota_in_progress lcd_bridge.on_power_state(9, v) end end)
-tasmota.add_rule("Matter#Commissioning", def(v, t) if !global.ota_in_progress && v != nil lcd_bridge.write_u16(300, int(v)) end end)
+tasmota.add_rule("RESULT", def(v, t) if v != nil parse_ds18(v.find("StatusSNS", v)) end end)
+tasmota.add_rule("Tele-JSON", def(v, t) if v != nil parse_ds18(v) end end)
+tasmota.add_rule("Power7#State", def(v, t) lcd_bridge.on_power_state(7, v) end)
+tasmota.add_rule("Power8#State", def(v, t) lcd_bridge.on_power_state(8, v) end)
+tasmota.add_rule("Power9#State", def(v, t) lcd_bridge.on_power_state(9, v) end)
+tasmota.add_rule("Matter#Commissioning", def(v, t) if v != nil lcd_bridge.write_u16(300, int(v)) end end)
 
 tasmota.add_cmd('LCDWriteCO2', def(cmd, idx, payload)
   if payload != nil && payload != "" lcd_bridge.on_co2(int(payload)) end

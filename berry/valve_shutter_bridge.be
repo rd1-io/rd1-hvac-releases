@@ -32,7 +32,6 @@ class ValveBridge
   end
 
   def handle_shutter(value, trigger)
-    if global.ota_in_progress return end  # Skip during OTA
     if value == nil return end
     var p = int(value)
     if p < 0 p = 0 end

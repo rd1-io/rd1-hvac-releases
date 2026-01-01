@@ -33,7 +33,6 @@ class RelayController
   end
 
   def handle_modbus_received(value, trigger)
-    if global.ota_in_progress return end  # Skip during OTA
     if value == nil || value["DeviceAddress"] != self.ADDR || value["FunctionCode"] != 1 return end
     var sa = value["StartAddress"]
     var vals = value["Values"]
@@ -74,9 +73,7 @@ for ch: 1 .. 6
 end
 
 def relay_poll_timer()
-  if !global.ota_in_progress
-    relay_ctrl.poll_all_channels()
-  end
+  relay_ctrl.poll_all_channels()
   tasmota.set_timer(9967, relay_poll_timer, "relay_poll")
 end
 

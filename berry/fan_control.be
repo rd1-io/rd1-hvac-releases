@@ -341,7 +341,6 @@ tasmota.add_cmd('ExhaustModeMultiplier', def(cmd, idx, payload)
 end)
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)
-  if global.ota_in_progress return end  # Skip during OTA
   if value == nil return end
   if value['DeviceAddress'] != 109 return end
   var fc = value['FunctionCode']

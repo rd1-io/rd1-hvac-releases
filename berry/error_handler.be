@@ -1,8 +1,5 @@
 import string
 
-# Initialize OTA flag if not exists
-if global.ota_in_progress == nil global.ota_in_progress = false end
-
 class ErrorHandler
   static var MAO4_ADDR = 109
   static var DI_ADDR = 140
@@ -51,26 +48,22 @@ class ErrorHandler
   end
 
   def start_mao4_poll()
-    if global.ota_in_progress return end  # Skip during OTA
     self.poll_mao4_counter()
     tasmota.set_timer(10007, /-> self.start_mao4_poll(), "err_mao4")
   end
 
   def start_di_poll()
-    if global.ota_in_progress return end  # Skip during OTA
     self.poll_di_batch()
     tasmota.set_timer(9973, /-> self.start_di_poll(), "err_di")
   end
 
   def start_lcd_sync()
-    if global.ota_in_progress return end  # Skip during OTA
     self.sync_lcd_periodic()
     tasmota.set_timer(59987, /-> self.start_lcd_sync(), "err_lcd")
   end
 
 
   def poll_mao4_counter()
-    if global.ota_in_progress return end
     try
       tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":1,"tag":"err:mao4","quiet":30,"retries":2}', self.MAO4_ADDR, self.MAO4_COUNTER_REG))
     except .. as e, m
@@ -79,7 +72,6 @@ class ErrorHandler
   end
 
   def poll_di_batch()
-    if global.ota_in_progress return end
     var now = tasmota.millis()
     if now - self.last_di_poll_ms < 1000 return end
     self.last_di_poll_ms = now
@@ -235,7 +227,6 @@ class ErrorHandler
   end
 
   def sync_lcd_now(critical)
-    if global.ota_in_progress return end
     var now = tasmota.millis()
     var cmd_name = critical ? "MBGateCritical" : "MBGate"
     try
@@ -402,7 +393,6 @@ var error_handler = ErrorHandler()
 global.error_handler = error_handler
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)
-  if global.ota_in_progress return end  # Skip during OTA
   if value == nil return end
   var dev = value['DeviceAddress']
   var fc = value['FunctionCode']

@@ -14,10 +14,6 @@ class ExhaustModeController
   end
 
   def start_poll()
-    if global.ota_in_progress
-      tasmota.set_timer(10007, /-> self.start_poll(), "exhaust_mode_poll")
-      return
-    end
     self.poll_mode_register()
     tasmota.set_timer(10007, /-> self.start_poll(), "exhaust_mode_poll")
   end
@@ -62,7 +58,6 @@ var exhaust_mode = ExhaustModeController()
 global.exhaust_mode = exhaust_mode
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)
-  if global.ota_in_progress return end  # Skip during OTA
   if value == nil return end
   var dev = value['DeviceAddress']
   var fc = value['FunctionCode']

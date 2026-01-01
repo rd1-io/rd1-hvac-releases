@@ -26,6 +26,7 @@ class CO2Driver
 end
 
 var co2_driver = CO2Driver()
+global.co2_driver = co2_driver
 
 def read_co2()
   tasmota.cmd('MBGate {"deviceaddress":1,"functioncode":3,"startaddress":2,"type":"uint16","count":1,"tag":"co2:r03:","quiet":50,"retries":2}')
@@ -38,7 +39,6 @@ tasmota.add_cmd('CO2Value', def(cmd, idx, payload)
 end)
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)
-  if global.ota_in_progress return end  # Skip during OTA
   if value['DeviceAddress'] == 1 && value['FunctionCode'] == 3 && value['StartAddress'] == 2
     var vals = nil
     try vals = value['Values'] except .. as e return end
@@ -49,9 +49,7 @@ end)
 tasmota.add_driver(co2_driver)
 
 def co2_timer_callback()
-  if !global.ota_in_progress
-    read_co2()
-  end
+  read_co2()
   tasmota.set_timer(30011, co2_timer_callback, "co2_auto_read")
 end
 
