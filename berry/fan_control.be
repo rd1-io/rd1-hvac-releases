@@ -55,7 +55,7 @@ class FanController
     var val = int(pct)
     if val < 0 val = 0 end
     if val > 100 val = 100 end
-    tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"mao4:w16:","quiet":30,"retries":2}', self.MAO4_ADDR, reg, val))
+    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"mao4:w16:","quiet":30,"retries":2}', self.MAO4_ADDR, reg, val))
   end
 
   def emergency_stop()

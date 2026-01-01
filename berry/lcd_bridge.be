@@ -4,12 +4,11 @@ import json
 class LCDBridge
   static var LCD_ADDR = 23
   static var STATUS_REG = 100
-  static var STATUS_COUNT = 12
+  static var STATUS_COUNT = 13
   static var ENV_REG = 200
   static var ENV_COUNT = 20
   static var MATTER_STATUS_REG = 300
-  static var MATTER_PAYLOAD_REG = 301
-  static var MATTER_PAIRING_REG = 314
+  static var MATTER_PAIRING_REG = 301
   static var OTA_STATUS_REG = 400
   static var VERSION_REG = 218
   var co2_ppm, indoor_t, indoor_h, ds18_1, ds18_2, ds18_3
@@ -397,26 +396,34 @@ class LCDBridge
       end
     end
     if matter_dev != nil && matter_dev.commissioning != nil
-      var qr = matter_dev.commissioning.compute_qrcode_content()
       var manual = str(matter_dev.commissioning.compute_manual_pairing_code())
-      var vals = [1]
-      var qr_bytes = bytes().fromstring(qr)
-      while size(qr_bytes) < 26 qr_bytes.add(0) end
-      for i: 0 .. 12
-        vals.push((qr_bytes[i * 2] << 8) | qr_bytes[i * 2 + 1])
-      end
       var p1 = 0, p2 = 0, p3 = 0
       if size(manual) >= 11
         p1 = int(manual[0..3])
         p2 = int(manual[4..6])
         p3 = int(manual[7..10])
       end
-      vals.push(p1)
-      vals.push(p2)
-      vals.push(p3)
-      self.write_multi(self.MATTER_STATUS_REG, vals)
+      # Send status (1=commissioning open) and pairing code as single batch
+      # Registers: 300=status, 301=p1, 302=p2, 303=p3
+      self.write_multi(self.MATTER_STATUS_REG, [1, p1, p2, p3])
     end
     tasmota.set_timer(5000, def() self.matter_processing = false end)
+  end
+
+  def on_matter_reset()
+    print("Matter: Reset requested - deleting fabrics and restarting")
+    # Delete Matter fabrics file
+    try
+      import path
+      if path.exists("/_matter_fabrics.json")
+        path.remove("/_matter_fabrics.json")
+        print("Matter: Deleted _matter_fabrics.json")
+      end
+    except .. as e, m
+      print("Matter: Error deleting file -", e, m)
+    end
+    # Restart Tasmota after short delay
+    tasmota.set_timer(1000, /-> tasmota.cmd("Restart 1"))
   end
 
   def web_sensor()
@@ -487,6 +494,9 @@ tasmota.add_rule("ModBusReceived", def(value, trigger)
     end
     if vals[11] != nil
       lcd_bridge.apply_exhaust_mode_balance_lcd(int(vals[11]))
+    end
+    if vals[12] != nil && int(vals[12]) == 1
+      lcd_bridge.on_matter_reset()
     end
   end
   if dev == 10 && fc == 4 && vals != nil && size(vals) > 0

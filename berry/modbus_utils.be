@@ -156,6 +156,17 @@ tasmota.add_cmd('MBGateCritical', def(cmd, idx, payload)
     tasmota.resp_cmnd(r["error"])
     return
   end
+  # Remove any queued commands with same key (prevents non-critical from overriding critical)
+  var key = r["key"]
+  if key != nil && size(modbus_gate.queue) > 1
+    var newq = [modbus_gate.queue[0]]
+    for i: 1 .. size(modbus_gate.queue) - 1
+      var k2 = nil
+      try k2 = modbus_gate.queue[i]["key"] except .. end
+      if k2 == nil || k2 != key newq.push(modbus_gate.queue[i]) end
+    end
+    modbus_gate.queue = newq
+  end
   modbus_gate.send(r["cmd_str"], r["tag"], r["quiet"], r["retries"], 1)
   tasmota.resp_cmnd_done()
 end)
@@ -173,5 +184,18 @@ class ModbusGateStatus
     tasmota.response_append(string.format(',\"Modbus\":{\"QueueRemaining\":%i}', rem))
   end
 end
+
+tasmota.add_cmd('MBGateQueue', def(cmd, idx, payload)
+  import json
+  var q = modbus_gate.queue
+  var result = string.format('Queue size: %d, Busy: %d\n', size(q), modbus_gate.busy)
+  for i: 0 .. size(q) - 1
+    var item = q[i]
+    result += string.format('[%d] tag=%s, cmd=%s, retries=%d, attempt=%d\n', 
+      i, str(item['tag']), str(item['cmd']), item['retries'], item['attempt'])
+  end
+  print(result)
+  tasmota.resp_cmnd(result)
+end)
 
 var modbus_gate_status = ModbusGateStatus()

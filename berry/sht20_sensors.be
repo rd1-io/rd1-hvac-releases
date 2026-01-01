@@ -24,9 +24,9 @@ class SHT20Driver
 
   def update_temp(raw) self.temp_c = raw / 10.0 self.last_ms = tasmota.millis() end
   def update_humi(raw) self.humi_pct = raw / 10.0 self.last_ms = tasmota.millis() end
-  def read_reg(reg) tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":1,"timeout":3000,"tag":"sht20:r04:","quiet":40,"retries":2}', self.addr, reg)) end
-  def read_temp() self.read_reg(1) end
-  def read_humi() self.read_reg(2) end
+  def read_both()
+    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":4,"startaddress":1,"type":"uint16","count":2,"timeout":3000,"tag":"sht20:r04:","quiet":40,"retries":2}', self.addr))
+  end
 end
 
 var sht20_outdoor = SHT20Driver(2, "улица")
@@ -46,26 +46,26 @@ tasmota.add_rule("ModBusReceived", def(value, trigger)
   var vals = nil
   try vals = value['Values'] except .. return end
   if vals == nil || size(vals) == 0 return end
-  var raw = vals[0]
-  if raw == nil return end
-  if dev == 2
-    if sa == 1 sht20_outdoor.update_temp(raw) end
-    if sa == 2 sht20_outdoor.update_humi(raw) end
-  elif dev == 10
-    if sa == 1 sht20_indoor.update_temp(raw) end
-    if sa == 2 sht20_indoor.update_humi(raw) end
+  
+  # Combined read: startaddress=1, count=2 -> vals[0]=temp, vals[1]=humi
+  if sa == 1 && size(vals) >= 2
+    if dev == 2
+      sht20_outdoor.update_temp(vals[0])
+      sht20_outdoor.update_humi(vals[1])
+    elif dev == 10
+      sht20_indoor.update_temp(vals[0])
+      sht20_indoor.update_humi(vals[1])
+    end
   end
 end)
 
 tasmota.add_cmd('OutdoorSHTRead', def(cmd, idx, payload)
-  sht20_outdoor.read_temp()
-  tasmota.set_timer(1500, /-> sht20_outdoor.read_humi())
+  sht20_outdoor.read_both()
   tasmota.resp_cmnd_done()
 end)
 
 tasmota.add_cmd('IndoorSHTRead', def(cmd, idx, payload)
-  sht20_indoor.read_temp()
-  tasmota.set_timer(1500, /-> sht20_indoor.read_humi())
+  sht20_indoor.read_both()
   tasmota.resp_cmnd_done()
 end)
 
@@ -77,12 +77,8 @@ tasmota.add_cmd('IndoorSHTValue', def(cmd, idx, payload)
   tasmota.resp_cmnd(string.format("T:%.1f C, H:%.1f %%", sht20_indoor.temp_c != nil ? sht20_indoor.temp_c : 0, sht20_indoor.humi_pct != nil ? sht20_indoor.humi_pct : 0))
 end)
 
-def outdoor_temp_timer() sht20_outdoor.read_temp() tasmota.set_timer(119993, outdoor_temp_timer, "sht_ot") end
-def outdoor_humi_timer() sht20_outdoor.read_humi() tasmota.set_timer(119971, outdoor_humi_timer, "sht_oh") end
-def indoor_temp_timer() sht20_indoor.read_temp() tasmota.set_timer(29981, indoor_temp_timer, "sht_it") end
-def indoor_humi_timer() sht20_indoor.read_humi() tasmota.set_timer(30013, indoor_humi_timer, "sht_ih") end
+def outdoor_timer() sht20_outdoor.read_both() tasmota.set_timer(119993, outdoor_timer, "sht_out") end
+def indoor_timer() sht20_indoor.read_both() tasmota.set_timer(29981, indoor_timer, "sht_in") end
 
-tasmota.set_timer(4000, outdoor_temp_timer, "sht_ot")
-tasmota.set_timer(34000, outdoor_humi_timer, "sht_oh")
-tasmota.set_timer(10000, indoor_temp_timer, "sht_it")
-tasmota.set_timer(25000, indoor_humi_timer, "sht_ih")
+tasmota.set_timer(4000, outdoor_timer, "sht_out")
+tasmota.set_timer(10000, indoor_timer, "sht_in")
