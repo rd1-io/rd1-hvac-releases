@@ -258,15 +258,16 @@ class LCDBridge
 
   def apply_preset_lcd(p)
     if p == nil return end
-    p = p < 1 ? 1 : (p > 3 ? 3 : int(p))
+    p = p < 1 ? 1 : (p > 4 ? 4 : int(p))
     var now = tasmota.millis()
     if self.change_source == "tasmota" && now - self.change_ms < 7000 return end
     if now - self.preset_apply_ms < 400 return end
     if self.preset != nil && self.preset == p && now - self.preset_apply_ms < 3000 return end
     self.echo_suppress_ms = now + 2000
-    if p == 1 tasmota.cmd("Backlog Power7 ON; Power8 OFF; Power9 OFF")
-    elif p == 2 tasmota.cmd("Backlog Power7 OFF; Power8 ON; Power9 OFF")
-    else tasmota.cmd("Backlog Power7 OFF; Power8 OFF; Power9 ON") end
+    if p == 1 tasmota.cmd("Backlog Power7 ON; Power8 OFF; Power9 OFF; Power10 OFF")
+    elif p == 2 tasmota.cmd("Backlog Power7 OFF; Power8 ON; Power9 OFF; Power10 OFF")
+    elif p == 3 tasmota.cmd("Backlog Power7 OFF; Power8 OFF; Power9 ON; Power10 OFF")
+    else tasmota.cmd("Backlog Power7 OFF; Power8 OFF; Power9 OFF; Power10 ON") end
     self.preset = p
     self.preset_apply_ms = now
     self.change_source = "lcd"
@@ -275,7 +276,7 @@ class LCDBridge
 
   def write_preset(p)
     if p == nil return end
-    p = p < 1 ? 1 : (p > 3 ? 3 : int(p))
+    p = p < 1 ? 1 : (p > 4 ? 4 : int(p))
     var now = tasmota.millis()
     if self.preset_sent != nil && self.preset_sent == p && now - self.preset_ms < 3000 return end
     if now - self.preset_ms < 600 return end
@@ -329,16 +330,17 @@ class LCDBridge
     var now = tasmota.millis()
     if now < self.echo_suppress_ms
       var exp = nil
-      if self.preset == 1 exp = 7 elif self.preset == 2 exp = 8 elif self.preset == 3 exp = 9 end
+      if self.preset == 1 exp = 7 elif self.preset == 2 exp = 8 elif self.preset == 3 exp = 9 elif self.preset == 4 exp = 10 end
       if exp != nil && pwr == exp return end
     end
     if val != "ON" && val != 1 && val != "1" return end
     var p = nil
-    if pwr == 7 p = 1 elif pwr == 8 p = 2 elif pwr == 9 p = 3 else return end
+    if pwr == 7 p = 1 elif pwr == 8 p = 2 elif pwr == 9 p = 3 elif pwr == 10 p = 4 else return end
     self.echo_suppress_ms = now + 2000
-    if p == 1 tasmota.cmd("Backlog Power7 ON; Power8 OFF; Power9 OFF")
-    elif p == 2 tasmota.cmd("Backlog Power7 OFF; Power8 ON; Power9 OFF")
-    else tasmota.cmd("Backlog Power7 OFF; Power8 OFF; Power9 ON") end
+    if p == 1 tasmota.cmd("Backlog Power7 ON; Power8 OFF; Power9 OFF; Power10 OFF")
+    elif p == 2 tasmota.cmd("Backlog Power7 OFF; Power8 ON; Power9 OFF; Power10 OFF")
+    elif p == 3 tasmota.cmd("Backlog Power7 OFF; Power8 OFF; Power9 ON; Power10 OFF")
+    else tasmota.cmd("Backlog Power7 OFF; Power8 OFF; Power9 OFF; Power10 ON") end
     self.change_source = "tasmota"
     self.change_ms = now
     self.preset = p
@@ -413,7 +415,7 @@ tasmota.add_rule("ModBusReceived", def(value, trigger)
     end
     if vals[2] != nil
       var p = int(vals[2])
-      p = p < 1 ? 1 : (p > 3 ? 3 : p)
+      p = p < 1 ? 1 : (p > 4 ? 4 : p)
       lcd_bridge.apply_preset_lcd(p)
     end
     if vals[3] != nil && int(vals[3]) == 1 && !lcd_bridge.matter_processing
@@ -466,4 +468,5 @@ tasmota.add_rule("Tele-JSON", def(v, t) if v != nil parse_ds18(v) end end)
 tasmota.add_rule("Power7#State", def(v, t) lcd_bridge.on_power_state(7, v) end)
 tasmota.add_rule("Power8#State", def(v, t) lcd_bridge.on_power_state(8, v) end)
 tasmota.add_rule("Power9#State", def(v, t) lcd_bridge.on_power_state(9, v) end)
+tasmota.add_rule("Power10#State", def(v, t) lcd_bridge.on_power_state(10, v) end)
 tasmota.add_rule("Matter#Commissioning", def(v, t) if v != nil lcd_bridge.write_u16(300, int(v)) end end)
