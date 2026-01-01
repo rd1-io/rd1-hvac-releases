@@ -14,7 +14,7 @@ class SHT20Driver
   def update_temp(raw) self.temp_c = raw / 10.0 self.last_ms = tasmota.millis() end
   def update_humi(raw) self.humi_pct = raw / 10.0 self.last_ms = tasmota.millis() end
   def read_both()
-    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":4,"startaddress":1,"type":"uint16","count":2,"timeout":3000,"tag":"sht20:r04:","quiet":40,"retries":2}', self.addr))
+    global.mb(self.addr, 4, 1, 2, nil, "sht20:r04", false)
   end
 end
 

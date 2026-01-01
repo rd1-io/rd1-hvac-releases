@@ -26,8 +26,7 @@ class ValveBridge
     var p = int(pct)
     if p < 0 p = 0 end
     if p > 100 p = 100 end
-    # Процентный режим: пишем 0-100 в Holding регистр 18
-    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"valve:w16:","quiet":30,"retries":2}', self.MAO4_ADDR, self.AO3_REG, p))
+    global.mb(self.MAO4_ADDR, 16, self.AO3_REG, 1, str(p), "valve:w16", false)
   end
 
   def handle_shutter(value, trigger)

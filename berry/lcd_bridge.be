@@ -102,10 +102,7 @@ class LCDBridge
   def write_u16(reg, val)
     if val == nil return end
     val = val < 0 ? 0 : (val > 65535 ? 65535 : int(val))
-    try
-      tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"lcd:w16:","quiet":100,"retries":2}', self.LCD_ADDR, reg, val))
-    except ..
-    end
+    try global.mb(self.LCD_ADDR, 16, reg, 1, str(val), "lcd:w16", false) except .. end
   end
 
   def write_multi(reg, vals)
@@ -116,17 +113,11 @@ class LCDBridge
       v = v < 0 ? 0 : (v > 65535 ? 65535 : v)
       buf += (i > 0 ? "," : "") + str(v)
     end
-    try
-      tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":%d,"values":[%s],"tag":"lcd:env","quiet":120,"retries":2}', self.LCD_ADDR, reg, size(vals), buf))
-    except ..
-    end
+    try global.mb(self.LCD_ADDR, 16, reg, size(vals), buf, "lcd:env", false) except .. end
   end
 
   def request_status()
-    try
-      tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":3,"startaddress":%d,"type":"uint16","count":%d,"timeout":3000,"tag":"lcd:sta","quiet":120,"retries":2}', self.LCD_ADDR, self.STATUS_REG, self.STATUS_COUNT))
-    except ..
-    end
+    try global.mb(self.LCD_ADDR, 3, self.STATUS_REG, self.STATUS_COUNT, nil, "lcd:sta", true) except .. end
   end
 
   def on_co2(ppm)

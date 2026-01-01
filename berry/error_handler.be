@@ -64,38 +64,26 @@ class ErrorHandler
 
 
   def poll_mao4_counter()
-    try
-      tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":1,"tag":"err:mao4","quiet":30,"retries":2}', self.MAO4_ADDR, self.MAO4_COUNTER_REG))
-    except ..
-    end
+    try global.mb(self.MAO4_ADDR, 4, self.MAO4_COUNTER_REG, 1, nil, "err:mao4", true) except .. end
   end
 
   def poll_di_batch()
     var now = tasmota.millis()
     if now - self.last_di_poll_ms < 1000 return end
     self.last_di_poll_ms = now
-    try
-      tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":%d,"tag":"err:di","quiet":30,"retries":2}', self.DI_ADDR, self.DI_START_REG, self.DI_REG_COUNT))
-    except ..
-    end
+    try global.mb(self.DI_ADDR, 4, self.DI_START_REG, self.DI_REG_COUNT, nil, "err:di", true) except .. end
   end
 
   def emergency_fan_stop()
-    try
-      tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:emrg","quiet":30,"retries":3}', self.MAO4_ADDR, self.SUPPLY_REG))
-    except ..
-    end
+    try global.mb(self.MAO4_ADDR, 16, self.SUPPLY_REG, 1, "0", "err:emrg", true) except .. end
     tasmota.set_timer(100, def()
-      try
-        tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:emrg","quiet":30,"retries":3}', self.MAO4_ADDR, self.EXHAUST_REG))
-      except ..
-      end
+      try global.mb(self.MAO4_ADDR, 16, self.EXHAUST_REG, 1, "0", "err:emrg", true) except .. end
     end)
   end
 
   def restore_mao4_channels()
-    try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.SUPPLY_REG)) except .. end
-    tasmota.set_timer(200, def() try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.EXHAUST_REG)) except .. end end)
+    try global.mb(self.MAO4_ADDR, 16, self.SUPPLY_REG, 1, "0", "err:rst", false) except .. end
+    tasmota.set_timer(200, def() try global.mb(self.MAO4_ADDR, 16, self.EXHAUST_REG, 1, "0", "err:rst", false) except .. end end)
     tasmota.set_timer(400, def() try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":5,"startaddress":%d,"type":"bit","count":1,"values":[1],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.SUPPLY_REG)) except .. end end)
     tasmota.set_timer(600, def() try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":5,"startaddress":%d,"type":"bit","count":1,"values":[1],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.EXHAUST_REG)) except .. end end)
   end
@@ -186,7 +174,7 @@ class ErrorHandler
     self.pause_active = false
     self.pause_set_ms = now
     self.error_mask = self.error_mask & (0xFFFF ^ self.ERR_PAUSE)
-    try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:pclr","quiet":60,"retries":2}', self.LCD_ADDR, self.PAUSE_RELEASE_REG)) except .. end
+    try global.mb(self.LCD_ADDR, 16, self.PAUSE_RELEASE_REG, 1, "0", "err:pclr", false) except .. end
     self.sync_lcd(false)
   end
 
@@ -216,13 +204,11 @@ class ErrorHandler
 
   def sync_lcd_now(critical)
     var now = tasmota.millis()
-    var cmd_name = critical ? "MBGateCritical" : "MBGate"
     try
-      tasmota.cmd(string.format('%s {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"err:lcd","quiet":60,"retries":2}', cmd_name, self.LCD_ADDR, self.ERROR_REG, self.error_mask))
+      global.mb(self.LCD_ADDR, 16, self.ERROR_REG, 1, str(self.error_mask), "err:lcd", critical)
       self.last_sent_mask = self.error_mask
       self.last_sync_ms = now
-    except ..
-    end
+    except .. end
   end
 
   def sync_lcd(force)
@@ -259,7 +245,7 @@ class ErrorHandler
     elif bit == 15
       self.release_pause()
     end
-    try tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:ack","quiet":30,"retries":3}', self.LCD_ADDR, self.RESET_REG)) except .. end
+    try global.mb(self.LCD_ADDR, 16, self.RESET_REG, 1, "0", "err:ack", true) except .. end
     tasmota.set_timer(200, /-> self.sync_lcd(true))
   end
 

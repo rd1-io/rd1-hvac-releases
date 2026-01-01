@@ -1,1 +1,1 @@
-{"name":"vent-rd1-io LCD","version":"44","builds":[{"chipFamily":"ESP32-S3","ota":{"path":"https://raw.githubusercontent.com/rd1-io/rd1-hvac-releases/main/lcd/lcd_firmware.bin","md5":"9cd1991883bb6708cffc48190d23b96a"}}]}
+{"name":"vent-rd1-io LCD","version":"45","builds":[{"chipFamily":"ESP32-S3","ota":{"path":"https://raw.githubusercontent.com/rd1-io/rd1-hvac-releases/main/lcd/lcd_firmware.bin","md5":"d49cf9816b74afa238dd9229eb5f4aa2"}}]}

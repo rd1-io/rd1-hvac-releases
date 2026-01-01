@@ -55,12 +55,12 @@ class FanController
     var val = int(pct)
     if val < 0 val = 0 end
     if val > 100 val = 100 end
-    tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"mao4:w16:","quiet":30,"retries":2}', self.MAO4_ADDR, reg, val))
+    global.mb(self.MAO4_ADDR, 16, reg, 1, str(val), "mao4:w16", true)
   end
 
   def emergency_stop()
-    tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"fan:emrg","quiet":30,"retries":3}', self.MAO4_ADDR, self.SUPPLY_REG))
-    tasmota.set_timer(100, /-> tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"fan:emrg","quiet":30,"retries":3}', self.MAO4_ADDR, self.EXHAUST_REG)))
+    global.mb(self.MAO4_ADDR, 16, self.SUPPLY_REG, 1, "0", "fan:emrg", true)
+    tasmota.set_timer(100, /-> global.mb(self.MAO4_ADDR, 16, self.EXHAUST_REG, 1, "0", "fan:emrg", true))
     self.supply_pct = 0
     self.exhaust_pct = 0
   end
@@ -135,7 +135,7 @@ class FanController
   end
 
   def read_register(reg)
-    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":3,"startaddress":%d,"type":"uint16","count":1,"tag":"mao4:r03:","quiet":30,"retries":2}', self.MAO4_ADDR, reg))
+    global.mb(self.MAO4_ADDR, 3, reg, 1, nil, "mao4:r03", false)
   end
 
   # Get the active balance multiplier (exhaust mode or normal)

@@ -95,6 +95,18 @@ end
 
 var modbus_gate = ModbusGate()
 
+def mb(addr, fc, reg, cnt, vals, tag, crit)
+  var cmd = string.format('ModBusSend {"deviceaddress":%d,"functioncode":%d,"startaddress":%d,"type":"uint16","count":%d}', addr, fc, reg, cnt)
+  if vals != nil cmd = string.replace(cmd, "}", ',"values":[' + vals + ']}') end
+  var key = string.format("%d:%d:%d", addr, fc, reg)
+  if crit
+    modbus_gate.send(cmd, tag, 30, 2, 1)
+  else
+    modbus_gate.send_coalesced(cmd, tag, 30, 2, key)
+  end
+end
+global.mb = mb
+
 tasmota.add_rule("RESULT", def(value, trigger)
   if value == nil return end
   try

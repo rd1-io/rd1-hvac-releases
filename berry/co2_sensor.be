@@ -17,7 +17,7 @@ var co2_driver = CO2Driver()
 global.co2_driver = co2_driver
 
 def read_co2()
-  tasmota.cmd('MBGate {"deviceaddress":1,"functioncode":3,"startaddress":2,"type":"uint16","count":1,"tag":"co2:r03:","quiet":50,"retries":2}')
+  global.mb(1, 3, 2, 1, nil, "co2:r03", false)
 end
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)

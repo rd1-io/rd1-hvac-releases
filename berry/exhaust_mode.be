@@ -22,7 +22,7 @@ class ExhaustModeController
     var now = tasmota.millis()
     if now - self.last_poll_ms < 1000 return end
     self.last_poll_ms = now
-    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":1,"tag":"exhaust:mode","quiet":30,"retries":2}', self.DI_ADDR, self.MODE_REG))
+    global.mb(self.DI_ADDR, 4, self.MODE_REG, 1, nil, "exhaust:mode", false)
   end
 
   def on_mode_read(val)
