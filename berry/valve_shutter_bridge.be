@@ -18,7 +18,7 @@ class ValveBridge
 
   def enable_channel(on)
     var val = on ? 1 : 0
-    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":5,"startaddress":%d,"type":"bit","count":1,"values":[%d],"tag":"valve:coil:","quiet":30,"retries":2}', self.MAO4_ADDR, self.COIL_REG, val))
+    global.mb(self.MAO4_ADDR, 5, self.COIL_REG, 1, str(val), "valve:coil", false, "bit")
     self.channel_enabled = on
   end
 

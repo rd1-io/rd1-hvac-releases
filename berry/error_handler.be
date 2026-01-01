@@ -84,8 +84,8 @@ class ErrorHandler
   def restore_mao4_channels()
     try global.mb(self.MAO4_ADDR, 16, self.SUPPLY_REG, 1, "0", "err:rst", false) except .. end
     tasmota.set_timer(200, def() try global.mb(self.MAO4_ADDR, 16, self.EXHAUST_REG, 1, "0", "err:rst", false) except .. end end)
-    tasmota.set_timer(400, def() try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":5,"startaddress":%d,"type":"bit","count":1,"values":[1],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.SUPPLY_REG)) except .. end end)
-    tasmota.set_timer(600, def() try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":5,"startaddress":%d,"type":"bit","count":1,"values":[1],"tag":"err:rst","quiet":30,"retries":2}', self.MAO4_ADDR, self.EXHAUST_REG)) except .. end end)
+    tasmota.set_timer(400, def() try global.mb(self.MAO4_ADDR, 5, self.SUPPLY_REG, 1, "1", "err:rst", false, "bit") except .. end end)
+    tasmota.set_timer(600, def() try global.mb(self.MAO4_ADDR, 5, self.EXHAUST_REG, 1, "1", "err:rst", false, "bit") except .. end end)
   end
 
   def on_mao4_counter(val)

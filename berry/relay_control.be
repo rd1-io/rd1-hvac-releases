@@ -12,11 +12,11 @@ class RelayController
 
   def send_read_bits(start_address, count)
     if count == nil || count <= 0 return end
-    tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":1,"startaddress":%d,"type":"bit","count":%d,"timeout":3000,"tag":"relay:fc1:","quiet":120,"retries":2}', self.ADDR, start_address, count))
+    global.mb(self.ADDR, 1, start_address, count, nil, "relay:fc1", false, "bit")
   end
 
   def send_write_bit(start_address, value)
-    tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":5,"startaddress":%d,"type":"bit","count":1,"values":[%d],"timeout":1000,"tag":"relay:fc5:","quiet":120,"retries":2}', self.ADDR, start_address, value))
+    global.mb(self.ADDR, 5, start_address, 1, str(value), "relay:fc5", true, "bit")
   end
 
   def poll_all_channels()

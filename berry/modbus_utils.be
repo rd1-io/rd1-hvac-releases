@@ -95,8 +95,9 @@ end
 
 var modbus_gate = ModbusGate()
 
-def mb(addr, fc, reg, cnt, vals, tag, crit)
-  var cmd = string.format('ModBusSend {"deviceaddress":%d,"functioncode":%d,"startaddress":%d,"type":"uint16","count":%d}', addr, fc, reg, cnt)
+def mb(addr, fc, reg, cnt, vals, tag, crit, typ)
+  var t = typ != nil ? typ : "uint16"
+  var cmd = string.format('ModBusSend {"deviceaddress":%d,"functioncode":%d,"startaddress":%d,"type":"%s","count":%d}', addr, fc, reg, t, cnt)
   if vals != nil cmd = string.replace(cmd, "}", ',"values":[' + vals + ']}') end
   var key = string.format("%d:%d:%d", addr, fc, reg)
   if crit
