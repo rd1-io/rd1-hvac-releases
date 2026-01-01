@@ -28,8 +28,11 @@ class RelayController
   def verify_valve_coil(actual_coil_value)
     var expected = tasmota.get_power(0)
     var actual = (actual_coil_value != 0)
-    if expected && !actual tasmota.cmd("Power1 ON")
-    elif !expected && actual tasmota.cmd("Power1 OFF") end
+    if expected && !actual 
+      self.send_write_bit(0, 1)  # Напрямую Modbus, не через Power (избегаем проблему с #State)
+    elif !expected && actual 
+      self.send_write_bit(0, 0)
+    end
   end
 
   def handle_modbus_received(value, trigger)
