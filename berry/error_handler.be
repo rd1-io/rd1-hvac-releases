@@ -66,8 +66,7 @@ class ErrorHandler
   def poll_mao4_counter()
     try
       tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":1,"tag":"err:mao4","quiet":30,"retries":2}', self.MAO4_ADDR, self.MAO4_COUNTER_REG))
-    except .. as e, m
-      print("[ERR] poll_mao4_counter failed:", e, m)
+    except ..
     end
   end
 
@@ -77,22 +76,19 @@ class ErrorHandler
     self.last_di_poll_ms = now
     try
       tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":4,"startaddress":%d,"type":"uint16","count":%d,"tag":"err:di","quiet":30,"retries":2}', self.DI_ADDR, self.DI_START_REG, self.DI_REG_COUNT))
-    except .. as e, m
-      print("[ERR] poll_di_batch failed:", e, m)
+    except ..
     end
   end
 
   def emergency_fan_stop()
     try
       tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:emrg","quiet":30,"retries":3}', self.MAO4_ADDR, self.SUPPLY_REG))
-    except .. as e, m
-      print("[ERR] emergency_fan_stop supply failed:", e, m)
+    except ..
     end
     tasmota.set_timer(100, def()
       try
         tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:emrg","quiet":30,"retries":3}', self.MAO4_ADDR, self.EXHAUST_REG))
-      except .. as e, m
-        print("[ERR] emergency_fan_stop exhaust failed:", e, m)
+      except ..
       end
     end)
   end
@@ -115,7 +111,6 @@ class ErrorHandler
       if (self.error_mask & self.ERR_PRESSURE) == 0
         self.error_mask = self.error_mask | self.ERR_PRESSURE
         self.error_set_ms = tasmota.millis()
-        print(string.format("[ERR] PRESSURE ERROR (MAO4)! counter=%d (was %d)", self.mao4_current, self.mao4_initial))
         self.emergency_fan_stop()
         self.sync_lcd(false)
       end
@@ -139,7 +134,6 @@ class ErrorHandler
       if (self.error_mask & self.ERR_FILTER_SUPPLY) == 0
         self.error_mask = self.error_mask | self.ERR_FILTER_SUPPLY
         self.error_set_ms = tasmota.millis()
-        print(string.format("[ERR] FILTER SUPPLY DP! counter=%d (was %d)", self.di_current[3], self.di_initial[3]))
         self.emergency_fan_stop()
         self.sync_lcd(false)
       end
@@ -148,7 +142,6 @@ class ErrorHandler
       if (self.error_mask & self.ERR_FILTER_EXHAUST) == 0
         self.error_mask = self.error_mask | self.ERR_FILTER_EXHAUST
         self.error_set_ms = tasmota.millis()
-        print(string.format("[ERR] FILTER EXHAUST DP! counter=%d (was %d)", self.di_current[4], self.di_initial[4]))
         self.emergency_fan_stop()
         self.sync_lcd(false)
       end
@@ -157,7 +150,6 @@ class ErrorHandler
       if (self.error_mask & self.ERR_RECUPERATOR) == 0
         self.error_mask = self.error_mask | self.ERR_RECUPERATOR
         self.error_set_ms = tasmota.millis()
-        print(string.format("[ERR] RECUPERATOR DP! counter=%d (was %d)", self.di_current[5], self.di_initial[5]))
         self.emergency_fan_stop()
         self.sync_lcd(false)
       end
@@ -181,7 +173,6 @@ class ErrorHandler
     self.pause_active = true
     self.pause_set_ms = now
     self.error_mask = self.error_mask | self.ERR_PAUSE
-    print("[PAUSE] System paused by external button")
     try global.fan_ctrl.set_power_level(0) except .. 
       tasmota.cmd("VentPowerLevel 0")
     end
@@ -195,7 +186,6 @@ class ErrorHandler
     self.pause_active = false
     self.pause_set_ms = now
     self.error_mask = self.error_mask & (0xFFFF ^ self.ERR_PAUSE)
-    print("[PAUSE] System resumed")
     try tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[0],"tag":"err:pclr","quiet":60,"retries":2}', self.LCD_ADDR, self.PAUSE_RELEASE_REG)) except .. end
     self.sync_lcd(false)
   end
@@ -204,11 +194,9 @@ class ErrorHandler
     var release_req = release_val != nil ? int(release_val) : 0
     var activate_req = activate_val != nil ? int(activate_val) : 0
     if release_req == 1 && self.pause_active
-      print("[PAUSE] Release requested from LCD")
       self.release_pause()
     end
     if activate_req == 1 && !self.pause_active
-      print("[PAUSE] Activate requested from LCD")
       self.activate_pause()
     end
   end
@@ -233,8 +221,7 @@ class ErrorHandler
       tasmota.cmd(string.format('%s {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"err:lcd","quiet":60,"retries":2}', cmd_name, self.LCD_ADDR, self.ERROR_REG, self.error_mask))
       self.last_sent_mask = self.error_mask
       self.last_sync_ms = now
-    except .. as e, m
-      print("[ERR] sync_lcd_now failed:", e, m)
+    except ..
     end
   end
 
@@ -258,7 +245,6 @@ class ErrorHandler
     var mask = 1 << bit
     if (self.error_mask & mask) == 0 return end
     if now - self.error_set_ms < 5000 return end
-    print(string.format("[ERR] Error reset bit %d", bit))
     self.error_mask = self.error_mask & (0xFFFF ^ mask)
     self.last_reset_ms = now
     if bit == 0 && self.mao4_current != nil
@@ -286,106 +272,26 @@ class ErrorHandler
     return self.error_mask
   end
 
-  def has_error(bit)
-    return (self.error_mask & (1 << bit)) != 0
-  end
-
-  def is_paused()
-    return self.pause_active
-  end
-
-  def get_counter_info()
-    return {
-      "mao4_initial": self.mao4_initial, 
-      "mao4_current": self.mao4_current, 
-      "mao4_init": self.mao4_init,
-      "di_initial": self.di_initial,
-      "di_current": self.di_current,
-      "pause_active": self.pause_active
-    }
-  end
-
-  def reset_error(bit)
-    if bit < 0 || bit > 15 return end
-    var mask = 1 << bit
-    if (self.error_mask & mask) != 0
-      self.error_mask = self.error_mask & (0xFFFF ^ mask)
-      if bit == 0 && self.mao4_current != nil
-        self.mao4_initial = self.mao4_current
-        self.restore_mao4_channels()
-      elif bit == 1 && self.di_current[5] != nil
-        self.di_initial[5] = self.di_current[5]
-      elif bit == 2 && self.di_current[3] != nil
-        self.di_initial[3] = self.di_current[3]
-      elif bit == 3 && self.di_current[4] != nil
-        self.di_initial[4] = self.di_current[4]
-      elif bit == 15
-        self.pause_active = false
-      end
-      self.sync_lcd(false)
-    end
-  end
-
-  def set_error(bit)
-    if bit < 0 || bit > 15 return end
-    self.error_mask = self.error_mask | (1 << bit)
-    if bit == 15 self.pause_active = true end
-    self.sync_lcd(false)
-  end
-
   def web_sensor()
     if self.pause_active
-      tasmota.web_send_decimal("{s}<b>Статус системы</b>{m}<span style='color:#FF8800'><b>ПАУЗА</b></span>{e}")
+      tasmota.web_send_decimal("{s}<b>Статус</b>{m}<span style='color:#FF8800'><b>ПАУЗА</b></span>{e}")
     elif self.error_mask != 0
-      tasmota.web_send_decimal(string.format("{s}<b>Статус системы</b>{m}<span style='color:#FF4444'><b>ОШИБКИ (0x%04X)</b></span>{e}", self.error_mask))
+      tasmota.web_send_decimal("{s}<b>Статус</b>{m}<span style='color:#FF4444'><b>ОШИБКА</b></span>{e}")
     else
-      tasmota.web_send_decimal("{s}<b>Статус системы</b>{m}<span style='color:#00CC00'><b>OK</b></span>{e}")
+      tasmota.web_send_decimal("{s}<b>Статус</b>{m}<span style='color:#00CC00'><b>OK</b></span>{e}")
     end
     if (self.error_mask & self.ERR_PRESSURE) != 0
-      tasmota.web_send_decimal("{s}  • Давление (MAO4){m}<span style='color:#FF4444'>ОШИБКА</span>{e}")
+      tasmota.web_send_decimal("{s}• Давление{m}<span style='color:#FF4444'>ERR</span>{e}")
     end
     if (self.error_mask & self.ERR_RECUPERATOR) != 0
-      tasmota.web_send_decimal("{s}  • Рекуператор{m}<span style='color:#FF4444'>ОШИБКА</span>{e}")
+      tasmota.web_send_decimal("{s}• Рекуператор{m}<span style='color:#FF4444'>ERR</span>{e}")
     end
     if (self.error_mask & self.ERR_FILTER_SUPPLY) != 0
-      tasmota.web_send_decimal("{s}  • Приточный фильтр{m}<span style='color:#FF4444'>ОШИБКА</span>{e}")
+      tasmota.web_send_decimal("{s}• Фильтр приток{m}<span style='color:#FF4444'>ERR</span>{e}")
     end
     if (self.error_mask & self.ERR_FILTER_EXHAUST) != 0
-      tasmota.web_send_decimal("{s}  • Вытяжной фильтр{m}<span style='color:#FF4444'>ОШИБКА</span>{e}")
+      tasmota.web_send_decimal("{s}• Фильтр вытяжка{m}<span style='color:#FF4444'>ERR</span>{e}")
     end
-    tasmota.web_send_decimal("{s}<b>Счётчики срабатываний</b>{m}{e}")
-    if self.mao4_init
-      var mao4_diff = self.mao4_current != nil && self.mao4_initial != nil ? self.mao4_current - self.mao4_initial : 0
-      var mao4_color = mao4_diff > 0 ? "#FF4444" : "#888888"
-      tasmota.web_send_decimal(string.format("{s}  Давление приток/вытяжка{m}<span style='color:%s'>%d</span> (база: %d){e}", mao4_color, self.mao4_current != nil ? self.mao4_current : 0, self.mao4_initial != nil ? self.mao4_initial : 0))
-    end
-    if self.di_init[0]
-      tasmota.web_send_decimal(string.format("{s}  Внешняя кнопка{m}%d (база: %d){e}", self.di_current[0] != nil ? self.di_current[0] : 0, self.di_initial[0] != nil ? self.di_initial[0] : 0))
-    end
-    if self.di_init[3]
-      var fs_diff = self.di_current[3] != nil && self.di_initial[3] != nil ? self.di_current[3] - self.di_initial[3] : 0
-      var fs_color = fs_diff > 0 ? "#FF4444" : "#888888"
-      tasmota.web_send_decimal(string.format("{s}  Приточный фильтр{m}<span style='color:%s'>%d</span> (база: %d){e}", fs_color, self.di_current[3] != nil ? self.di_current[3] : 0, self.di_initial[3] != nil ? self.di_initial[3] : 0))
-    end
-    if self.di_init[4]
-      var fe_diff = self.di_current[4] != nil && self.di_initial[4] != nil ? self.di_current[4] - self.di_initial[4] : 0
-      var fe_color = fe_diff > 0 ? "#FF4444" : "#888888"
-      tasmota.web_send_decimal(string.format("{s}  Вытяжной фильтр{m}<span style='color:%s'>%d</span> (база: %d){e}", fe_color, self.di_current[4] != nil ? self.di_current[4] : 0, self.di_initial[4] != nil ? self.di_initial[4] : 0))
-    end
-    if self.di_init[5]
-      var rec_diff = self.di_current[5] != nil && self.di_initial[5] != nil ? self.di_current[5] - self.di_initial[5] : 0
-      var rec_color = rec_diff > 0 ? "#FF4444" : "#888888"
-      tasmota.web_send_decimal(string.format("{s}  Рекуператор{m}<span style='color:%s'>%d</span> (база: %d){e}", rec_color, self.di_current[5] != nil ? self.di_current[5] : 0, self.di_initial[5] != nil ? self.di_initial[5] : 0))
-    end
-  end
-
-  def json_append()
-    var pause_str = self.pause_active ? "true" : "false"
-    var p0 = (self.error_mask & self.ERR_PRESSURE) != 0 ? "true" : "false"
-    var p1 = (self.error_mask & self.ERR_FILTER_SUPPLY) != 0 ? "true" : "false"
-    var p2 = (self.error_mask & self.ERR_FILTER_EXHAUST) != 0 ? "true" : "false"
-    var p3 = (self.error_mask & self.ERR_RECUPERATOR) != 0 ? "true" : "false"
-    tasmota.response_append(string.format(',\"Errors\":{\"Mask\":%d,\"Pause\":%s,\"Pressure\":%s,\"FilterSupply\":%s,\"FilterExhaust\":%s,\"Recuperator\":%s}', self.error_mask, pause_str, p0, p1, p2, p3))
   end
 end
 
@@ -409,45 +315,4 @@ tasmota.add_rule("ModBusReceived", def(value, trigger)
       error_handler.on_di_batch(vals)
     end
   end
-end)
-
-tasmota.add_cmd('ErrorStatus', def(cmd, idx, payload)
-  var info = error_handler.get_counter_info()
-  var pause_str = info["pause_active"] ? "PAUSED" : "running"
-  tasmota.resp_cmnd(string.format("Mask: 0x%04X, State: %s, MAO4: %s (base: %s)", 
-    error_handler.get_error_mask(), pause_str,
-    str(info["mao4_current"]), str(info["mao4_initial"])))
-end)
-
-tasmota.add_cmd('ErrorReset', def(cmd, idx, payload)
-  if payload == nil || payload == ""
-    tasmota.resp_cmnd("Usage: ErrorReset <bit>")
-    return
-  end
-  error_handler.reset_error(int(payload))
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('ErrorSet', def(cmd, idx, payload)
-  if payload == nil || payload == ""
-    tasmota.resp_cmnd("Usage: ErrorSet <bit>")
-    return
-  end
-  error_handler.set_error(int(payload))
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('PauseStatus', def(cmd, idx, payload)
-  var status = error_handler.is_paused() ? "PAUSED" : "RUNNING"
-  tasmota.resp_cmnd(string.format('{"Pause":"%s"}', status))
-end)
-
-tasmota.add_cmd('PauseRelease', def(cmd, idx, payload)
-  error_handler.release_pause()
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('PauseActivate', def(cmd, idx, payload)
-  error_handler.activate_pause()
-  tasmota.resp_cmnd_done()
 end)

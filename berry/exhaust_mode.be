@@ -29,8 +29,6 @@ class ExhaustModeController
     var was_active = self.active
     self.active = (val != nil && int(val) != 0)
     if self.active != was_active
-      print(string.format("[EXHAUST_MODE] Mode %s", self.active ? "ACTIVATED" : "DEACTIVATED"))
-      # Notify fan controller to recalculate with new mode
       try
         if global.fan_ctrl != nil && global.fan_ctrl.power_level > 0 && global.fan_ctrl.valve_open
           global.fan_ctrl.set_both(global.fan_ctrl.power_level)
@@ -43,15 +41,6 @@ class ExhaustModeController
     return self.active
   end
 
-  def web_sensor()
-    if self.active
-      tasmota.web_send_decimal("{s}<b>Режим вытяжки</b>{m}<span style='color:#FFAA00'><b>АКТИВЕН</b></span>{e}")
-    end
-  end
-
-  def json_append()
-    tasmota.response_append(string.format(',\"ExhaustMode\":{\"Active\":%s}', self.active ? "true" : "false"))
-  end
 end
 
 var exhaust_mode = ExhaustModeController()
@@ -69,9 +58,5 @@ tasmota.add_rule("ModBusReceived", def(value, trigger)
       exhaust_mode.on_mode_read(vals[0])
     end
   end
-end)
-
-tasmota.add_cmd('ExhaustModeStatus', def(cmd, idx, payload)
-  tasmota.resp_cmnd(string.format('{"ExhaustMode":"%s"}', exhaust_mode.is_active() ? "ACTIVE" : "INACTIVE"))
 end)
 

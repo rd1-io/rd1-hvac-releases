@@ -178,24 +178,6 @@ class ModbusGateStatus
     if rem < 0 rem = 0 end
     tasmota.web_send_decimal(string.format("{s}Очередь Modbus{m}%i{e}", rem))
   end
-  def json_append()
-    var rem = size(modbus_gate.queue) - (modbus_gate.busy != 0 ? 1 : 0)
-    if rem < 0 rem = 0 end
-    tasmota.response_append(string.format(',\"Modbus\":{\"QueueRemaining\":%i}', rem))
-  end
 end
-
-tasmota.add_cmd('MBGateQueue', def(cmd, idx, payload)
-  import json
-  var q = modbus_gate.queue
-  var result = string.format('Queue size: %d, Busy: %d\n', size(q), modbus_gate.busy)
-  for i: 0 .. size(q) - 1
-    var item = q[i]
-    result += string.format('[%d] tag=%s, cmd=%s, retries=%d, attempt=%d\n', 
-      i, str(item['tag']), str(item['cmd']), item['retries'], item['attempt'])
-  end
-  print(result)
-  tasmota.resp_cmnd(result)
-end)
 
 var modbus_gate_status = ModbusGateStatus()

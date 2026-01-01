@@ -11,17 +11,6 @@ class SHT20Driver
     self.last_ms = 0
   end
 
-  def web_sensor()
-    if self.temp_c != nil tasmota.web_send_decimal(string.format("{s}Температура %s{m}%.1f °C{e}", self.label, self.temp_c)) end
-    if self.humi_pct != nil tasmota.web_send_decimal(string.format("{s}Влажность %s{m}%.1f %%{e}", self.label, self.humi_pct)) end
-  end
-
-  def json_append()
-    if self.temp_c != nil || self.humi_pct != nil
-      tasmota.response_append(string.format(',\"%sSHT20\":{\"Temperature\":%.1f,\"Humidity\":%.1f}', self.label, self.temp_c != nil ? self.temp_c : 0, self.humi_pct != nil ? self.humi_pct : 0))
-    end
-  end
-
   def update_temp(raw) self.temp_c = raw / 10.0 self.last_ms = tasmota.millis() end
   def update_humi(raw) self.humi_pct = raw / 10.0 self.last_ms = tasmota.millis() end
   def read_both()
@@ -57,24 +46,6 @@ tasmota.add_rule("ModBusReceived", def(value, trigger)
       sht20_indoor.update_humi(vals[1])
     end
   end
-end)
-
-tasmota.add_cmd('OutdoorSHTRead', def(cmd, idx, payload)
-  sht20_outdoor.read_both()
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('IndoorSHTRead', def(cmd, idx, payload)
-  sht20_indoor.read_both()
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('OutdoorSHTValue', def(cmd, idx, payload)
-  tasmota.resp_cmnd(string.format("T:%.1f C, H:%.1f %%", sht20_outdoor.temp_c != nil ? sht20_outdoor.temp_c : 0, sht20_outdoor.humi_pct != nil ? sht20_outdoor.humi_pct : 0))
-end)
-
-tasmota.add_cmd('IndoorSHTValue', def(cmd, idx, payload)
-  tasmota.resp_cmnd(string.format("T:%.1f C, H:%.1f %%", sht20_indoor.temp_c != nil ? sht20_indoor.temp_c : 0, sht20_indoor.humi_pct != nil ? sht20_indoor.humi_pct : 0))
 end)
 
 def outdoor_timer() sht20_outdoor.read_both() tasmota.set_timer(119993, outdoor_timer, "sht_out") end

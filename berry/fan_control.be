@@ -219,17 +219,6 @@ class FanController
     end)
   end
 
-  def web_sensor()
-    tasmota.web_send_decimal(string.format("{s}Приточный вентилятор{m}%i %%{e}", int(self.supply_pct)))
-    tasmota.web_send_decimal(string.format("{s}Вытяжной вентилятор{m}%i %%{e}", int(self.exhaust_pct)))
-    tasmota.web_send_decimal(string.format("{s}Баланс приток/вытяжка{m}%i %%{e}", int(self.exhaust_mult * 100)))
-    tasmota.web_send_decimal(string.format("{s}Баланс режима вытяжки{m}%i %%{e}", int(self.exhaust_mode_mult * 100)))
-  end
-
-  def json_append()
-    tasmota.response_append(string.format(',\"Fans\":{\"Supply\":%i,\"Exhaust\":%i,\"Balance\":%i,\"ExhaustModeBalance\":%i,\"Unit\":\"%%\"}', int(self.supply_pct), int(self.exhaust_pct), int(self.exhaust_mult * 100), int(self.exhaust_mode_mult * 100)))
-  end
-
   def every_second()
     if self.shutdown_in_progress return end
     if self.power_level > 0
@@ -286,12 +275,6 @@ end
 
 var fan_ctrl = FanController()
 global.fan_ctrl = fan_ctrl
-
-tasmota.add_cmd('SupplySpeed', def(cmd, idx, payload)
-  if payload == nil || payload == "" fan_ctrl.read_register(fan_ctrl.SUPPLY_REG)
-  else fan_ctrl.set_supply(int(payload)) end
-  tasmota.resp_cmnd_done()
-end)
 
 tasmota.add_cmd('VentPowerLevel', def(cmd, idx, payload)
   fan_ctrl.set_power_level(int(payload))

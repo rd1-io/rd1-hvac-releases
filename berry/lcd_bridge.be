@@ -1,5 +1,4 @@
 import string
-import json
 
 class LCDBridge
   static var LCD_ADDR = 23
@@ -59,7 +58,6 @@ class LCDBridge
     if ver == nil ver = 0 end
     ver = int(ver)
     self.write_u16(self.VERSION_REG, ver)
-    print(string.format("LCD: Sent Berry version %d", ver))
   end
 
   def status_timer()
@@ -106,8 +104,7 @@ class LCDBridge
     val = val < 0 ? 0 : (val > 65535 ? 65535 : int(val))
     try
       tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":1,"values":[%d],"tag":"lcd:w16:","quiet":100,"retries":2}', self.LCD_ADDR, reg, val))
-    except .. as e, m
-      print("[LCD] write_u16 failed:", e, m)
+    except ..
     end
   end
 
@@ -121,16 +118,14 @@ class LCDBridge
     end
     try
       tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":16,"startaddress":%d,"type":"uint16","count":%d,"values":[%s],"tag":"lcd:env","quiet":120,"retries":2}', self.LCD_ADDR, reg, size(vals), buf))
-    except .. as e, m
-      print("[LCD] write_multi failed:", e, m)
+    except ..
     end
   end
 
   def request_status()
     try
       tasmota.cmd(string.format('MBGateCritical {"deviceaddress":%d,"functioncode":3,"startaddress":%d,"type":"uint16","count":%d,"timeout":3000,"tag":"lcd:sta","quiet":120,"retries":2}', self.LCD_ADDR, self.STATUS_REG, self.STATUS_COUNT))
-    except .. as e, m
-      print("[LCD] request_status failed:", e, m)
+    except ..
     end
   end
 
@@ -270,23 +265,6 @@ class LCDBridge
     self.last_batch_ms = tasmota.millis()
   end
 
-
-  def apply_preset_local(p)
-    if p == nil return end
-    p = p < 1 ? 1 : (p > 3 ? 3 : int(p))
-    var now = tasmota.millis()
-    if now - self.preset_apply_ms < 400 return end
-    if self.preset != nil && self.preset == p && now - self.preset_apply_ms < 3000 return end
-    self.echo_suppress_ms = now + 2000
-    if p == 1 tasmota.cmd("Backlog Power7 ON; Power8 OFF; Power9 OFF")
-    elif p == 2 tasmota.cmd("Backlog Power7 OFF; Power8 ON; Power9 OFF")
-    else tasmota.cmd("Backlog Power7 OFF; Power8 OFF; Power9 ON") end
-    self.preset = p
-    self.preset_apply_ms = now
-    self.change_source = "tasmota"
-    self.change_ms = now
-  end
-
   def apply_preset_lcd(p)
     if p == nil return end
     p = p < 1 ? 1 : (p > 3 ? 3 : int(p))
@@ -338,15 +316,11 @@ class LCDBridge
 
   def on_ota_request(val)
     if val == nil || val != 1 return end
-    print("OTA: LCD requested firmware update")
     self.write_u16(self.OTA_STATUS_REG, 1)
     tasmota.set_timer(1000, /-> self.start_ota())
   end
 
-  # Start OTA update - downloads Berry files from GitHub
   def start_ota()
-    print("OTA: Starting Berry files update...")
-    # Write status 1 (updating) to LCD
     self.write_u16(self.OTA_STATUS_REG, 1)
     # Load and run OTA updater
     var bridge = self
@@ -354,9 +328,7 @@ class LCDBridge
       try
         load("ota_update.be")
         global.ota_start_update()
-      except .. as e, m
-        print("OTA: Error -", e, m)
-        # Write status 3 (error) to LCD
+      except ..
         bridge.write_u16(bridge.OTA_STATUS_REG, 3)
       end
     end)
@@ -411,30 +383,16 @@ class LCDBridge
   end
 
   def on_matter_reset()
-    print("Matter: Reset requested - deleting fabrics and restarting")
-    # Delete Matter fabrics file
     try
       import path
       if path.exists("/_matter_fabrics.json")
         path.remove("/_matter_fabrics.json")
-        print("Matter: Deleted _matter_fabrics.json")
       end
-    except .. as e, m
-      print("Matter: Error deleting file -", e, m)
+    except ..
     end
-    # Restart Tasmota after short delay
     tasmota.set_timer(1000, /-> tasmota.cmd("Restart 1"))
   end
 
-  def web_sensor()
-    # LCD CO2 removed - duplicate of CO2 Sensor
-  end
-
-  def json_append()
-    if self.co2_ppm != nil
-      tasmota.response_append(string.format(',\"LCD\":{\"CO2\":%i}', int(self.co2_ppm)))
-    end
-  end
 end
 
 var lcd_bridge = LCDBridge()
@@ -477,7 +435,6 @@ tasmota.add_rule("ModBusReceived", def(value, trigger)
       end
     end
     if vals[5] != nil && int(vals[5]) == 1
-      print("LCD requested restart - restarting Tasmota...")
       tasmota.cmd("Restart 1")
     end
     if vals[6] != nil
@@ -499,9 +456,9 @@ tasmota.add_rule("ModBusReceived", def(value, trigger)
       lcd_bridge.on_matter_reset()
     end
   end
-  if dev == 10 && fc == 4 && vals != nil && size(vals) > 0
-    if sa == 1 lcd_bridge.on_indoor_t(int(vals[0]) / 10.0) end
-    if sa == 2 lcd_bridge.on_indoor_h(int(vals[0]) / 10.0) end
+  if dev == 10 && fc == 4 && sa == 1 && vals != nil && size(vals) >= 2
+    lcd_bridge.on_indoor_t(int(vals[0]) / 10.0)
+    lcd_bridge.on_indoor_h(int(vals[1]) / 10.0)
   end
 end)
 
@@ -519,124 +476,3 @@ tasmota.add_rule("Power7#State", def(v, t) lcd_bridge.on_power_state(7, v) end)
 tasmota.add_rule("Power8#State", def(v, t) lcd_bridge.on_power_state(8, v) end)
 tasmota.add_rule("Power9#State", def(v, t) lcd_bridge.on_power_state(9, v) end)
 tasmota.add_rule("Matter#Commissioning", def(v, t) if v != nil lcd_bridge.write_u16(300, int(v)) end end)
-
-tasmota.add_cmd('LCDWriteCO2', def(cmd, idx, payload)
-  if payload != nil && payload != "" lcd_bridge.on_co2(int(payload)) end
-  lcd_bridge.publish_batch()
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('LCDSetTargetTemp', def(cmd, idx, payload)
-  if payload == nil || payload == ""
-    tasmota.resp_cmnd("Usage: LCDSetTargetTemp <C>")
-    return
-  end
-  var t = json.load(payload)
-  if t == nil
-    var dot = string.find(str(payload), ".")
-    if dot >= 0 t = int(string.replace(str(payload), ".", "")) / 10.0
-    else t = int(payload) end
-  end
-  lcd_bridge.write_u16(2, int(t * 10))
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('LCDGetTargetTemp', def(cmd, idx, payload)
-  tasmota.resp_cmnd(lcd_bridge.lcd_target_c != nil ? str(lcd_bridge.lcd_target_c) + " C" : "Unknown")
-end)
-
-tasmota.add_cmd('LCDTargetRead', def(cmd, idx, payload)
-  lcd_bridge.request_status()
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('LCDSetPowerLevel', def(cmd, idx, payload)
-  if payload == nil || payload == ""
-    tasmota.resp_cmnd("Usage: LCDSetPowerLevel <0..5>")
-    return
-  end
-  var lvl = int(payload)
-  lvl = lvl < 0 ? 0 : (lvl > 5 ? 5 : lvl)
-  lcd_bridge.apply_power(lvl)
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('LCDGetPowerLevel', def(cmd, idx, payload)
-  tasmota.resp_cmnd(lcd_bridge.lcd_power != nil ? str(lcd_bridge.lcd_power) : "Unknown")
-end)
-
-tasmota.add_cmd('LCDPowerRead', def(cmd, idx, payload)
-  lcd_bridge.request_status()
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('LCDSetIndoorTemp', def(cmd, idx, payload)
-  if payload == nil || payload == "" tasmota.resp_cmnd("Usage: LCDSetIndoorTemp <C>") return end
-  var t = json.load(payload)
-  if t == nil
-    var dot = string.find(str(payload), ".")
-    if dot >= 0 t = int(string.replace(str(payload), ".", "")) / 10.0
-    else t = int(payload) end
-  end
-  lcd_bridge.on_indoor_t(t)
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('LCDSetIndoorHumidity', def(cmd, idx, payload)
-  if payload == nil || payload == "" tasmota.resp_cmnd("Usage: LCDSetIndoorHumidity <%>") return end
-  var h = json.load(payload)
-  if h == nil
-    var dot = string.find(str(payload), ".")
-    if dot >= 0 h = int(string.replace(str(payload), ".", "")) / 10.0
-    else h = int(payload) end
-  end
-  lcd_bridge.on_indoor_h(h)
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('MatterOpen', def(cmd, idx, payload)
-  lcd_bridge.handle_matter()
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('LCDPresetRead', def(cmd, idx, payload)
-  tasmota.cmd(string.format('MBGate {"deviceaddress":%d,"functioncode":3,"startaddress":%d,"type":"uint16","count":1,"timeout":3000,"tag":"lcd:preset","quiet":120,"retries":2}', 23, 5))
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('LCDSetPreset', def(cmd, idx, payload)
-  if payload == nil || payload == ""
-    tasmota.resp_cmnd("Usage: LCDSetPreset <1..3>")
-    return
-  end
-  var p = int(payload)
-  p = p < 1 ? 1 : (p > 3 ? 3 : p)
-  lcd_bridge.preset = p
-  lcd_bridge.write_preset(p)
-  lcd_bridge.apply_preset_local(p)
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('LCDSetBalance', def(cmd, idx, payload)
-  if payload == nil || payload == ""
-    tasmota.resp_cmnd("Usage: LCDSetBalance <50..150>")
-    return
-  end
-  var bal = int(payload)
-  bal = bal < 50 ? 50 : (bal > 150 ? 150 : bal)
-  lcd_bridge.write_u16(lcd_bridge.BALANCE_REG, bal)
-  lcd_bridge.last_balance_sent = bal
-  lcd_bridge.balance_sent_ms = tasmota.millis()
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('LCDGetBalance', def(cmd, idx, payload)
-  var bal = 100
-  try bal = int(global.fan_ctrl.exhaust_mult * 100) except .. end
-  tasmota.resp_cmnd(string.format('{"Balance":%d}', bal))
-end)
-
-tasmota.add_cmd('LCDBalanceRead', def(cmd, idx, payload)
-  lcd_bridge.request_balance()
-  tasmota.resp_cmnd_done()
-end)

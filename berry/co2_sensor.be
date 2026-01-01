@@ -4,18 +4,6 @@ class CO2Driver
     self.co2_value = nil
     self.co2_timestamp = 0
   end
-  def web_sensor()
-    if self.co2_value != nil
-      import string
-      tasmota.web_send_decimal(string.format("{s}Датчик CO2{m}%i ppm{e}", self.co2_value))
-    end
-  end
-  def json_append()
-    if self.co2_value != nil
-      import string
-      tasmota.response_append(string.format(",\"CO2\":{\"CO2\":%i,\"Unit\":\"ppm\"}", self.co2_value))
-    end
-  end
   def update_co2(value)
     self.co2_value = value
     self.co2_timestamp = tasmota.millis()
@@ -31,12 +19,6 @@ global.co2_driver = co2_driver
 def read_co2()
   tasmota.cmd('MBGate {"deviceaddress":1,"functioncode":3,"startaddress":2,"type":"uint16","count":1,"tag":"co2:r03:","quiet":50,"retries":2}')
 end
-
-tasmota.add_cmd('CO2Read', def(cmd, idx, payload) read_co2() tasmota.resp_cmnd_done() end)
-tasmota.add_cmd('CO2Value', def(cmd, idx, payload)
-  var v = co2_driver.get_co2_value()
-  tasmota.resp_cmnd(v != nil ? str(v) + " ppm" : "No data")
-end)
 
 tasmota.add_rule("ModBusReceived", def(value, trigger)
   if value['DeviceAddress'] == 1 && value['FunctionCode'] == 3 && value['StartAddress'] == 2

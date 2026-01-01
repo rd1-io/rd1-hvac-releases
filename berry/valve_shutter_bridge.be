@@ -1,5 +1,4 @@
 import string
-import math
 import persist
 
 class ValveBridge
@@ -40,7 +39,9 @@ class ValveBridge
     
     # Проверка на дребезг
     if self.last_pct >= 0
-      if math.abs(p - self.last_pct) < 1 return end
+      var diff = p - self.last_pct
+      if diff < 0 diff = -diff end
+      if diff < 1 return end
       if now - self.last_ms < 120
         var latest = p
         tasmota.set_timer(120, /-> self.apply_valve(latest))
@@ -74,29 +75,12 @@ class ValveBridge
     if sp != nil && str(sp) != "" tasmota.cmd("PidSp " + str(sp)) end
   end
 
-  def web_sensor()
-    if self.last_pct >= 0 tasmota.web_send_decimal(string.format("{s}Положение клапана{m}%i %%{e}", int(self.last_pct))) end
-  end
-
-  def json_append()
-    if self.last_pct >= 0 tasmota.response_append(string.format(',\"Valve\":{\"Position\":%i,\"Unit\":\"%%\"}', int(self.last_pct))) end
-  end
 end
 
 var valve_bridge = ValveBridge()
 global.valve_bridge = valve_bridge
 
 tasmota.add_rule("Shutter1#Target", def(v, t) valve_bridge.handle_shutter(v, t) end)
-
-tasmota.add_cmd('ValvePercent', def(cmd, idx, payload)
-  var p = int(payload)
-  if p < 0 p = 0 end
-  if p > 100 p = 100 end
-  valve_bridge.apply_valve(p)
-  valve_bridge.last_pct = p
-  valve_bridge.last_ms = tasmota.millis()
-  tasmota.resp_cmnd_done()
-end)
 
 tasmota.add_cmd('PidSpSave', def(cmd, idx, payload)
   if payload == nil || payload == ""
@@ -106,10 +90,5 @@ tasmota.add_cmd('PidSpSave', def(cmd, idx, payload)
   persist.pid_setpoint = str(payload)
   persist.save()
   tasmota.cmd("PidSp " + str(payload))
-  tasmota.resp_cmnd_done()
-end)
-
-tasmota.add_cmd('PidSpRestore', def(cmd, idx, payload)
-  valve_bridge.restore_pid()
   tasmota.resp_cmnd_done()
 end)
