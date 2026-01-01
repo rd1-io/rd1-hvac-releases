@@ -22,6 +22,7 @@ var OTA_FILES_TO_DOWNLOAD = [
   "filter_wear.be",
   "cloud_logger.be",
   "exhaust_mode.be",
+  "climate_control.be",
   "ota_update.be"
 ]
 
@@ -38,7 +39,10 @@ var OTA_FILES_TO_DELETE = [
   "valve_shutter_bridge.be",
   "filter_wear.be",
   "cloud_logger.be",
-  "exhaust_mode.be"
+  "exhaust_mode.be",
+  "climate_control.be",
+  "cooling_control.be",
+  "humidity_control.be"
 ]
 
 # Public releases repository URL

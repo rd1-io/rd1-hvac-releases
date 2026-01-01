@@ -16,4 +16,5 @@ try load("sht20_sensors.be") except .. end
 try load("valve_shutter_bridge.be") except .. end
 try load("filter_wear.be") except .. end
 try load("lcd_bridge.be") except .. end
+try load("climate_control.be") except .. end
 try load("cloud_logger.be") except .. end
